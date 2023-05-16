@@ -34,20 +34,13 @@ public class PlayerController : MonoBehaviour
         // Move the spaceship forward and backward using the W and S keys
         float moveInput = Input.GetAxis("Vertical");
         spaceshipRigidbody.AddRelativeForce(Vector3.forward * moveInput * moveSpeed);
-        mainCamera.position = transform.position;
 
-        // Offset camera Y position by 10f to make it look like the camera is above the spaceship.
-        mainCamera.transform.position = new Vector3(mainCamera.transform.position.x, mainCamera.transform.position.y + 30f,  mainCamera.transform.position.z);
     
         // Rotate the spaceship around the Y axis using the A and D keys
         float rotateInput = Input.GetAxis("Horizontal");
         spaceshipRigidbody.AddRelativeTorque(Vector3.up * rotateInput * rotationSpeed * Time.fixedDeltaTime);
-        mainCamera.transform.rotation = new Quaternion(0,transform.rotation.y,transform.rotation.z, transform.rotation.w); 
-        //Aline the main camera rotation to the spaceship rotation.
-
-
-
     }
+    
     private void ShootMissile() {
      // Lock the spaceship controls during missile firing
             spaceshipRigidbody.constraints = RigidbodyConstraints.FreezeAll;

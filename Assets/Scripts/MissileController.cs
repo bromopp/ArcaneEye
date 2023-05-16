@@ -8,7 +8,7 @@ public class MissileController : MonoBehaviour
     public Transform cameraTarget;
     public void SetTarget(Vector3 target)
     {
-        targetPosition = target;
+
     }
 
     private void FixedUpdate()

@@ -22,15 +22,6 @@ public class PlayerController : MonoBehaviour
     private void Update()
     {
         // Get the input axes for the spaceship movement and rotation
-
-        // If the player presses the fire button and the spaceship is not already firing a missile, fire a missile
-        if (Input.GetKeyDown(KeyCode.Space) && !isFiring)
-        {
-            isFiring = true;
-            ShootMissile();
-        }
-    }
-    private void FixedUpdate(){
         // Move the spaceship forward and backward using the W and S keys
         float moveInput = Input.GetAxis("Vertical");
         spaceshipRigidbody.AddRelativeForce(Vector3.forward * moveInput * moveSpeed);
@@ -39,6 +30,12 @@ public class PlayerController : MonoBehaviour
         // Rotate the spaceship around the Y axis using the A and D keys
         float rotateInput = Input.GetAxis("Horizontal");
         spaceshipRigidbody.AddRelativeTorque(Vector3.up * rotateInput * rotationSpeed * Time.fixedDeltaTime);
+        // If the player presses the fire button and the spaceship is not already firing a missile, fire a missile
+        if (Input.GetKeyDown(KeyCode.Space) && !isFiring)
+        {
+            isFiring = true;
+            ShootMissile();
+        }
     }
     
     private void ShootMissile() {

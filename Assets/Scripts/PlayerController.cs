@@ -40,17 +40,11 @@ public class PlayerController : MonoBehaviour
     
     private void ShootMissile() {
      // Lock the spaceship controls during missile firing
-            spaceshipRigidbody.constraints = RigidbodyConstraints.FreezeAll;
-
-            // Switch to the missile camera view
-            mainCamera.transform.SetParent(missilePrefab.transform);
-            mainCamera.transform.localPosition = new Vector3(0f, 3f, -10f);
-            mainCamera.transform.localRotation = Quaternion.Euler(20f, 0f, 0f);
+            //spaceshipRigidbody.constraints = RigidbodyConstraints.FreezeAll;
 
             // Instantiate a new missile prefab and set its target
             GameObject missile = Instantiate(missilePrefab, transform.position + transform.forward * 2f, Quaternion.identity);
-            missile.GetComponent<MissileController>().SetTarget(transform.forward);
-
+           
             // Destroy the missile and switch back to the spaceship camera view after a delay
             Destroy(missile, 10f);
             Invoke("ResetControls", 3f);
@@ -58,13 +52,9 @@ public class PlayerController : MonoBehaviour
     private void ResetControls()
     {
         // Unlock the spaceship controls after missile firing
-        spaceshipRigidbody.constraints = RigidbodyConstraints.None;
+        //spaceshipRigidbody.constraints = RigidbodyConstraints.None;
 
         // Switch back to the spaceship camera view
-        mainCamera.transform.SetParent(transform);
-        mainCamera.transform.localPosition = new Vector3(0f,30f,0f);
-        mainCamera.transform.localRotation = Quaternion.Euler(90f, 90f, 0f);
-
         isFiring = false;
     }
 }

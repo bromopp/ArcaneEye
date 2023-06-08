@@ -9,7 +9,7 @@ public class MissileController : MonoBehaviour
     public Rigidbody missileBody;
     public CinemachineVirtualCamera cameraTarget;
     public float rotationSpeed = 100f;  // The speed of the spaceship rotation
-    public float force = 5f;
+    public float force = 0.0001f;
     public float maxSpeed = 50f;
     public void SetTarget(Vector3 target)
     {
@@ -23,12 +23,13 @@ public class MissileController : MonoBehaviour
     private void Update()
     {
         // Rotate the spaceship around the Y axis using the A and D keys
+        //TODO calcular el vector fuerza obteniendo la rotacion del objeto
         if(missileBody.velocity.magnitude <= maxSpeed){
             missileBody.AddRelativeForce(Vector3.forward*force);
         }
         float rotateInput = Input.GetAxis("Horizontal");
         missileBody.AddRelativeTorque(Vector3.up * rotateInput * rotationSpeed * Time.fixedDeltaTime);
-        //Debug.Log("x: "+ missileBody.position.x +",y: "+ missileBody.position.y +",z: " + missileBody.position.z);
+        Debug.Log("x: "+ missileBody.position.x +",y: "+ missileBody.position.y +",z: " + missileBody.position.z);
         Debug.Log("missil velocity: " +missileBody.velocity.magnitude);
     }
 }

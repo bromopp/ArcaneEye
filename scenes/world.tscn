@@ -1,0 +1,228 @@
+[gd_scene load_steps=11 format=3 uid="uid://d2y7xe2w3wdwr"]
+
+[ext_resource type="Shader" uid="uid://b3emxdrsb44o8" path="res://textures/skyBox.gdshader" id="1_rwgxs"]
+[ext_resource type="Script" uid="uid://bnpkmw2jkxxpl" path="res://scripts/WorldGenerator.cs" id="2_4wyf3"]
+[ext_resource type="PackedScene" uid="uid://b143nglsviyq6" path="res://scenes/ui.tscn" id="3_4wyf3"]
+[ext_resource type="PackedScene" uid="uid://cypc4hwce6lr4" path="res://scenes/asteroid.tscn" id="3_k0juu"]
+[ext_resource type="Script" uid="uid://otp3lfl6qf1y" path="res://scripts/GameController.cs" id="5_71j4m"]
+[ext_resource type="Script" uid="uid://bepgotx2k54ue" path="res://scripts/NetworkManager.cs" id="6_qfnet"]
+[ext_resource type="PackedScene" uid="uid://umttfuxbwwsj" path="res://scenes/player_ship.tscn" id="7_i7141"]
+
+[sub_resource type="ShaderMaterial" id="ShaderMaterial_71j4m"]
+shader = ExtResource("1_rwgxs")
+shader_parameter/vertical_sections = 21
+shader_parameter/star_size = 0.02
+shader_parameter/star_falloff = 4.0
+shader_parameter/margin = 0.05
+
+[sub_resource type="Sky" id="Sky_qfnet"]
+sky_material = SubResource("ShaderMaterial_71j4m")
+
+[sub_resource type="Environment" id="Environment_i7141"]
+background_mode = 2
+sky = SubResource("Sky_qfnet")
+ambient_light_source = 1
+ambient_light_color = Color(1, 1, 1, 1)
+
+[node name="Main" type="Node3D"]
+
+[node name="WorldGenerator" type="Node3D" parent="."]
+script = ExtResource("2_4wyf3")
+asteroidScene = ExtResource("3_k0juu")
+
+[node name="UIOld" parent="." instance=ExtResource("3_4wyf3")]
+visible = false
+
+[node name="Panel" parent="UIOld" index="0"]
+layout_mode = 0
+anchors_preset = 0
+anchor_right = 0.0
+anchor_bottom = 0.0
+grow_horizontal = 1
+grow_vertical = 1
+
+[node name="Panel" parent="UIOld/Panel" index="1"]
+offset_left = 902.0
+offset_right = 1152.0
+offset_bottom = 500.0
+
+[node name="GameController" type="Node" parent="."]
+script = ExtResource("5_71j4m")
+worldGeneratorPath = NodePath("../WorldGenerator")
+cameraPath = NodePath("")
+worldSizeSliderPath = NodePath("../UIOld/Panel/VBoxContainer/HBoxContainer/WorldSizeSlider")
+worldSizeLabelPath = NodePath("../UIOld/Panel/VBoxContainer/HBoxContainer/WorldSizeLabel")
+asteroidCountSliderPath = NodePath("../UIOld/Panel/VBoxContainer/HBoxContainer2/AsteroidCountSlider")
+asteroidCountLabelPath = NodePath("../UIOld/Panel/VBoxContainer/HBoxContainer2/AsteroidCountLabel")
+worldTypeOptionPath = NodePath("../UIOld/Panel/VBoxContainer/WorldTypeButton")
+showBoundsCheckPath = NodePath("../UIOld/Panel/VBoxContainer/ShowBoundsCheck")
+showGridCheckPath = NodePath("../UIOld/Panel/VBoxContainer/ShowGridCheck")
+generateButtonPath = NodePath("../UIOld/Panel/VBoxContainer/GenerateButton")
+
+[node name="WorldEnvironment" type="WorldEnvironment" parent="."]
+environment = SubResource("Environment_i7141")
+
+[node name="DirectionalLight3D" type="DirectionalLight3D" parent="."]
+transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 0, 0, -876.203)
+
+[node name="NetworkManager" type="Node" parent="." node_paths=PackedStringArray("playersContainer", "worldGenerator", "mainMenu", "gameUI", "playerNameInput", "ipAddressInput", "connectionStatus", "playerList")]
+script = ExtResource("6_qfnet")
+playerShipScene = ExtResource("7_i7141")
+playersContainer = NodePath("../PlayersContainer")
+worldGenerator = NodePath("../WorldGenerator")
+mainMenu = NodePath("../UI/MainMenu")
+gameUI = NodePath("../UI/GameUI")
+playerNameInput = NodePath("../UI/MainMenu/CenterContainer/VBoxContainer/VBoxContainer/LineEdit")
+ipAddressInput = NodePath("../UI/MainMenu/CenterContainer/VBoxContainer/JoinSection/IPAddressInput")
+connectionStatus = NodePath("../UI/MainMenu/CenterContainer/VBoxContainer/ConnectionStatus")
+playerList = NodePath("../UI/GameUI/Panel/VBoxContainer/PlayerList")
+
+[node name="UI" type="CanvasLayer" parent="."]
+
+[node name="MainMenu" type="Control" parent="UI"]
+layout_mode = 3
+anchors_preset = 15
+anchor_right = 1.0
+anchor_bottom = 1.0
+grow_horizontal = 2
+grow_vertical = 2
+
+[node name="ColorRect" type="ColorRect" parent="UI/MainMenu"]
+layout_mode = 1
+anchors_preset = 15
+anchor_right = 1.0
+anchor_bottom = 1.0
+grow_horizontal = 2
+grow_vertical = 2
+color = Color(0.101961, 0.101961, 0.101961, 1)
+
+[node name="CenterContainer" type="CenterContainer" parent="UI/MainMenu"]
+layout_mode = 1
+anchors_preset = 15
+anchor_right = 1.0
+anchor_bottom = 1.0
+grow_horizontal = 2
+grow_vertical = 2
+
+[node name="VBoxContainer" type="VBoxContainer" parent="UI/MainMenu/CenterContainer"]
+layout_mode = 2
+
+[node name="Label" type="Label" parent="UI/MainMenu/CenterContainer/VBoxContainer"]
+layout_mode = 2
+theme_override_font_sizes/font_size = 48
+text = "ArcaneEye Multiplayer"
+
+[node name="HSeparator" type="HSeparator" parent="UI/MainMenu/CenterContainer/VBoxContainer"]
+layout_mode = 2
+
+[node name="VBoxContainer" type="VBoxContainer" parent="UI/MainMenu/CenterContainer/VBoxContainer"]
+layout_mode = 2
+
+[node name="Label" type="Label" parent="UI/MainMenu/CenterContainer/VBoxContainer/VBoxContainer"]
+layout_mode = 2
+text = "Player Name:"
+
+[node name="LineEdit" type="LineEdit" parent="UI/MainMenu/CenterContainer/VBoxContainer/VBoxContainer"]
+layout_mode = 2
+text = "Annon"
+placeholder_text = "YourName"
+
+[node name="HSeparator2" type="HSeparator" parent="UI/MainMenu/CenterContainer/VBoxContainer"]
+layout_mode = 2
+
+[node name="HostSection" type="VBoxContainer" parent="UI/MainMenu/CenterContainer/VBoxContainer"]
+layout_mode = 2
+
+[node name="Label" type="Label" parent="UI/MainMenu/CenterContainer/VBoxContainer/HostSection"]
+layout_mode = 2
+text = "HOST GAME"
+
+[node name="HostButton" type="Button" parent="UI/MainMenu/CenterContainer/VBoxContainer/HostSection"]
+layout_mode = 2
+text = "Start Server"
+
+[node name="HSeparator3" type="HSeparator" parent="UI/MainMenu/CenterContainer/VBoxContainer"]
+layout_mode = 2
+
+[node name="JoinSection" type="VBoxContainer" parent="UI/MainMenu/CenterContainer/VBoxContainer"]
+layout_mode = 2
+
+[node name="Label" type="Label" parent="UI/MainMenu/CenterContainer/VBoxContainer/JoinSection"]
+layout_mode = 2
+text = "JOIN GAME"
+
+[node name="IPAddressInput" type="LineEdit" parent="UI/MainMenu/CenterContainer/VBoxContainer/JoinSection"]
+layout_mode = 2
+placeholder_text = "Server IP"
+
+[node name="JoinButton" type="Button" parent="UI/MainMenu/CenterContainer/VBoxContainer/JoinSection"]
+layout_mode = 2
+text = "Connect"
+
+[node name="HSeparator4" type="HSeparator" parent="UI/MainMenu/CenterContainer/VBoxContainer"]
+layout_mode = 2
+
+[node name="ConnectionStatus" type="Label" parent="UI/MainMenu/CenterContainer/VBoxContainer"]
+modulate = Color(0.725618, 0.635667, 0, 1)
+layout_mode = 2
+
+[node name="GameUI" type="Control" parent="UI"]
+visible = false
+layout_mode = 3
+anchors_preset = 15
+anchor_right = 1.0
+anchor_bottom = 1.0
+grow_horizontal = 2
+grow_vertical = 2
+
+[node name="Panel" type="Panel" parent="UI/GameUI"]
+layout_mode = 1
+offset_right = 250.0
+offset_bottom = 300.0
+
+[node name="VBoxContainer" type="VBoxContainer" parent="UI/GameUI/Panel"]
+layout_mode = 0
+offset_right = 40.0
+offset_bottom = 40.0
+
+[node name="Label" type="Label" parent="UI/GameUI/Panel/VBoxContainer"]
+layout_mode = 2
+text = "Players"
+
+[node name="PlayerList" type="ItemList" parent="UI/GameUI/Panel/VBoxContainer"]
+custom_minimum_size = Vector2(200, 200)
+layout_mode = 2
+
+[node name="DisconnectButton" type="Button" parent="UI/GameUI/Panel/VBoxContainer"]
+layout_mode = 2
+text = "Disconnect"
+
+[node name="ScorePanel" type="Panel" parent="UI/GameUI"]
+layout_mode = 1
+anchors_preset = 1
+anchor_left = 1.0
+anchor_right = 1.0
+offset_left = -200.0
+offset_bottom = 150.0
+grow_horizontal = 0
+
+[node name="VBoxContainer" type="VBoxContainer" parent="UI/GameUI/ScorePanel"]
+layout_mode = 0
+offset_right = 40.0
+offset_bottom = 40.0
+
+[node name="Score" type="Label" parent="UI/GameUI/ScorePanel/VBoxContainer"]
+layout_mode = 2
+text = "Score: 0"
+
+[node name="Lives" type="Label" parent="UI/GameUI/ScorePanel/VBoxContainer"]
+layout_mode = 2
+text = "Lives: 3"
+
+[node name="Wave" type="Label" parent="UI/GameUI/ScorePanel/VBoxContainer"]
+layout_mode = 2
+text = "Wave: 1"
+
+[node name="PlayersContainer" type="Node3D" parent="."]
+
+[editable path="UIOld"]

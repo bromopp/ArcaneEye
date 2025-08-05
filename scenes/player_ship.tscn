@@ -1,0 +1,22 @@
+[gd_scene load_steps=4 format=3 uid="uid://umttfuxbwwsj"]
+
+[ext_resource type="Script" uid="uid://ca4dwfds3roic" path="res://scripts/PlayerShip.cs" id="1_wbtlb"]
+
+[sub_resource type="PrismMesh" id="PrismMesh_ye4q7"]
+
+[sub_resource type="ConvexPolygonShape3D" id="ConvexPolygonShape3D_wbtlb"]
+points = PackedVector3Array(0, 0.5, 0.5, 0.5, -0.5, 0.5, 0, 0.5, -0.5, -0.5, -0.5, 0.5, 0.5, -0.5, -0.5, -0.5, -0.5, -0.5)
+
+[node name="PlayerShip" type="RigidBody3D"]
+script = ExtResource("1_wbtlb")
+
+[node name="MeshInstance3D" type="MeshInstance3D" parent="."]
+mesh = SubResource("PrismMesh_ye4q7")
+
+[node name="CollisionShape3D" type="CollisionShape3D" parent="."]
+shape = SubResource("ConvexPolygonShape3D_wbtlb")
+
+[node name="CameraRig" type="Node3D" parent="."]
+transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 0.00509691, -0.0194597, 0.00932932)
+
+[node name="Camera3D" type="Camera3D" parent="CameraRig"]

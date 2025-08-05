@@ -1,0 +1,11 @@
+[gd_scene load_steps=3 format=3 uid="uid://40cb5yb4xl3s"]
+
+[ext_resource type="Script" uid="uid://cuoj4v5i4eiad" path="res://scripts/bullet.cs" id="1_mkf8s"]
+
+[sub_resource type="SphereShape3D" id="SphereShape3D_y25gk"]
+
+[node name="Bullet" type="Area3D"]
+script = ExtResource("1_mkf8s")
+
+[node name="CollisionShape3D" type="CollisionShape3D" parent="."]
+shape = SubResource("SphereShape3D_y25gk")

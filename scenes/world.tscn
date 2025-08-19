@@ -1,4 +1,4 @@
-[gd_scene load_steps=11 format=3 uid="uid://d2y7xe2w3wdwr"]
+[gd_scene load_steps=15 format=3 uid="uid://d2y7xe2w3wdwr"]
 
 [ext_resource type="Shader" uid="uid://b3emxdrsb44o8" path="res://textures/skyBox.gdshader" id="1_rwgxs"]
 [ext_resource type="Script" uid="uid://bnpkmw2jkxxpl" path="res://scripts/WorldGenerator.cs" id="2_4wyf3"]
@@ -20,9 +20,25 @@ sky_material = SubResource("ShaderMaterial_71j4m")
 
 [sub_resource type="Environment" id="Environment_i7141"]
 background_mode = 2
+background_energy_multiplier = 3.82
 sky = SubResource("Sky_qfnet")
-ambient_light_source = 1
-ambient_light_color = Color(1, 1, 1, 1)
+ambient_light_source = 3
+ambient_light_color = Color(0.231373, 0.231373, 0.364706, 1)
+ambient_light_sky_contribution = 0.82
+ambient_light_energy = 6.34
+
+[sub_resource type="StandardMaterial3D" id="StandardMaterial3D_i7141"]
+albedo_color = Color(0, 0, 0, 1)
+roughness = 0.8
+
+[sub_resource type="SphereMesh" id="SphereMesh_4mrxx"]
+
+[sub_resource type="StandardMaterial3D" id="StandardMaterial3D_7r4gi"]
+roughness = 0.8
+
+[sub_resource type="StandardMaterial3D" id="StandardMaterial3D_w7kh3"]
+metallic = 1.0
+roughness = 0.1
 
 [node name="Main" type="Node3D"]
 
@@ -49,7 +65,6 @@ offset_bottom = 500.0
 [node name="GameController" type="Node" parent="."]
 script = ExtResource("5_71j4m")
 worldGeneratorPath = NodePath("../WorldGenerator")
-cameraPath = NodePath("")
 worldSizeSliderPath = NodePath("../UIOld/Panel/VBoxContainer/HBoxContainer/WorldSizeSlider")
 worldSizeLabelPath = NodePath("../UIOld/Panel/VBoxContainer/HBoxContainer/WorldSizeLabel")
 asteroidCountSliderPath = NodePath("../UIOld/Panel/VBoxContainer/HBoxContainer2/AsteroidCountSlider")
@@ -64,6 +79,8 @@ environment = SubResource("Environment_i7141")
 
 [node name="DirectionalLight3D" type="DirectionalLight3D" parent="."]
 transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 0, 0, -876.203)
+light_energy = 0.924
+light_specular = 2.166
 
 [node name="NetworkManager" type="Node" parent="." node_paths=PackedStringArray("playersContainer", "worldGenerator", "mainMenu", "gameUI", "playerNameInput", "ipAddressInput", "connectionStatus", "playerList")]
 script = ExtResource("6_qfnet")
@@ -224,5 +241,22 @@ layout_mode = 2
 text = "Wave: 1"
 
 [node name="PlayersContainer" type="Node3D" parent="."]
+
+[node name="Node3D" type="Node3D" parent="."]
+
+[node name="blacksphere" type="MeshInstance3D" parent="Node3D"]
+material_override = SubResource("StandardMaterial3D_i7141")
+mesh = SubResource("SphereMesh_4mrxx")
+
+[node name="whitesphere" type="MeshInstance3D" parent="Node3D"]
+transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 0, 1.75009, 0)
+material_override = SubResource("StandardMaterial3D_7r4gi")
+mesh = SubResource("SphereMesh_4mrxx")
+skeleton = NodePath("../blacksphere")
+
+[node name="MeshInstance3D3" type="MeshInstance3D" parent="Node3D"]
+transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 0, 3.20281, 0)
+material_override = SubResource("StandardMaterial3D_w7kh3")
+mesh = SubResource("SphereMesh_4mrxx")
 
 [editable path="UIOld"]

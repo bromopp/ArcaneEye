@@ -1,0 +1,32 @@
+[gd_scene load_steps=6 format=3 uid="uid://40cb5yb4xl3s"]
+
+[ext_resource type="Script" uid="uid://bgh8s44igrwq0" path="res://scripts/ControllableBullet.cs" id="1_mdeqr"]
+[ext_resource type="PackedScene" uid="uid://c8v4cu0b2f72m" path="res://scenes/explosion.tscn" id="2_6kh4y"]
+
+[sub_resource type="SphereShape3D" id="SphereShape3D_y25gk"]
+
+[sub_resource type="StandardMaterial3D" id="StandardMaterial3D_mkf8s"]
+albedo_color = Color(1, 0, 0, 1)
+emission_enabled = true
+emission = Color(1, 0, 0, 1)
+emission_energy_multiplier = 4.69
+
+[sub_resource type="SphereMesh" id="SphereMesh_y25gk"]
+material = SubResource("StandardMaterial3D_mkf8s")
+radial_segments = 7
+rings = 5
+
+[node name="ControllableBullet" type="Area3D"]
+collision_layer = 2
+collision_mask = 2
+script = ExtResource("1_mdeqr")
+lifetime = 2.0
+explosionScene = ExtResource("2_6kh4y")
+
+[node name="CollisionShape3D" type="CollisionShape3D" parent="."]
+shape = SubResource("SphereShape3D_y25gk")
+
+[node name="CSGMesh3D" type="CSGMesh3D" parent="."]
+mesh = SubResource("SphereMesh_y25gk")
+
+[connection signal="body_entered" from="." to="." method="_on_body_entered"]

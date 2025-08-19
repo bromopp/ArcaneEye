@@ -2,15 +2,23 @@ using Godot;
 
 public partial class PlayerShip : RigidBody3D
 {
-    [Export] private float thrustPower = 500.0f;
+    [Signal]
+    public delegate void HitEventHandler();
+    [Export] private float thrustPower = 5.0f;
     [Export] private float rotationSpeed = 3.0f;
-    [Export] private float maxSpeed = 100.0f;
+    [Export] private float maxSpeed = 50.0f;
     [Export] private PackedScene bulletScene;
 
+    [Export] private float mouseSensitivity = 0.002f;
+
     // Camera settings
-    [Export] private float cameraDistance = 10.0f;
+    [Export] private float cameraDistance = 15.0f;
     [Export] private float cameraHeight = 5.0f;
     [Export] private float cameraSmoothness = 5.0f;
+
+    [Export] private int maxLives = 3;
+    [Export] private float immunityDuration = 3.0f;
+    [Export] private float respawnDelay = 1.0f;
 
     private int playerId = 1;
     private Color playerColor = Colors.White;
@@ -19,14 +27,42 @@ public partial class PlayerShip : RigidBody3D
     private Camera3D playerCamera;
     private Node3D cameraRig;
 
+    private Vector2 mouseRotation = Vector2.Zero;
+
+    private ControllableBullet activeBullet = null;
+    private bool canFire = true;
+    private bool fireButtonPressed = false; // Track button state
+
     // Input state (for multiplayer sync)
     private Vector2 inputVector = Vector2.Zero;
     private bool isFiring = false;
-    private float lastFireTime = 0.0f;
-    private float fireRate = 0.25f; // Fire every 0.25 seconds
+
+    // Crosshair
+    private Control crosshairUI;
+    private TextureRect shipCrosshair;
+    private TextureRect bulletCrosshair;
+
+    // Stats
+    private int currentLives;
+    private bool isAlive = true;
+    private bool isImmune = false;
+    private float immunityTimer = 0.0f;
+
+    // State tracking for movement/shooting
+    private Vector3 spawnPosition;
+    private bool hasMovedSinceSpawn = false;
 
     public override void _Ready()
     {
+
+        // Debug print
+        GD.Print($"PlayerShip {Name} Ready:");
+        GD.Print($"  - Player ID: {playerId}");
+        GD.Print($"  - Bullet Scene: {(bulletScene != null ? "SET" : "NULL")}");
+        if (bulletScene != null)
+        {
+            GD.Print($"  - Bullet Scene Path: {bulletScene.ResourcePath}");
+        }
         // Get world reference
         world = GetNode<WorldGenerator>("/root/Main/WorldGenerator");
 
@@ -39,6 +75,12 @@ public partial class PlayerShip : RigidBody3D
         }
 
         CreateShipMesh();
+        SetupCamera();
+
+        // Create crosshair UI only for local player
+
+        SetupCrosshair();
+
 
         // Physics setup
         GravityScale = 0.0f;
@@ -50,6 +92,193 @@ public partial class PlayerShip : RigidBody3D
         {
             material.AlbedoColor = playerColor;
         }
+
+        if (IsMultiplayerAuthority())
+        {
+            Input.MouseMode = Input.MouseModeEnum.Captured;
+        }
+    }
+
+    private void SetupCrosshair()
+    {
+        // Create UI layer for crosshair
+        var canvasLayer = new CanvasLayer();
+        canvasLayer.Name = "CrosshairLayer";
+        AddChild(canvasLayer);
+
+        // Create control for centering
+        crosshairUI = new Control();
+        crosshairUI.SetAnchorsAndOffsetsPreset(Control.LayoutPreset.Center);
+        canvasLayer.AddChild(crosshairUI);
+
+        // Create ship crosshair (cross shape)
+        shipCrosshair = CreateCrossCrosshair();
+        crosshairUI.AddChild(shipCrosshair);
+
+        // Create bullet crosshair (circular)
+        bulletCrosshair = CreateCircularCrosshair();
+        bulletCrosshair.Visible = false;
+        crosshairUI.AddChild(bulletCrosshair);
+    }
+
+    private TextureRect CreateCrossCrosshair()
+    {
+        // Create a cross-shaped crosshair using ImageTexture
+        var image = Image.CreateEmpty(32, 32, false, Image.Format.Rgba8);
+        image.Fill(new Color(0, 0, 0, 0)); // Transparent background
+
+        var crossColor = new Color(0, 1, 0, 0.8f); // Green with some transparency
+
+        // Draw horizontal line
+        for (int x = 10; x < 22; x++)
+        {
+            if (x < 14 || x > 17) // Gap in center
+            {
+                image.SetPixel(x, 15, crossColor);
+                image.SetPixel(x, 16, crossColor);
+            }
+        }
+
+        // Draw vertical line
+        for (int y = 10; y < 22; y++)
+        {
+            if (y < 14 || y > 17) // Gap in center
+            {
+                image.SetPixel(15, y, crossColor);
+                image.SetPixel(16, y, crossColor);
+            }
+        }
+
+        var texture = ImageTexture.CreateFromImage(image);
+        var textureRect = new TextureRect();
+        textureRect.Texture = texture;
+        textureRect.Position = new Vector2(-16, -16);
+
+        return textureRect;
+    }
+
+    private TextureRect CreateCircularCrosshair()
+    {
+        // Create a circular crosshair
+        var image = Image.CreateEmpty(48, 48, false, Image.Format.Rgba8);
+        image.Fill(new Color(0, 0, 0, 0)); // Transparent background
+
+        var circleColor = new Color(1, 0.5f, 0, 0.9f); // Orange
+        var centerColor = new Color(1, 1, 0, 1); // Yellow center dot
+
+        // Draw circle
+        float centerX = 24;
+        float centerY = 24;
+        float radius = 20;
+
+        for (int x = 0; x < 48; x++)
+        {
+            for (int y = 0; y < 48; y++)
+            {
+                float dx = x - centerX;
+                float dy = y - centerY;
+                float distance = Mathf.Sqrt(dx * dx + dy * dy);
+
+                // Draw circle outline
+                if (distance >= radius - 1.5f && distance <= radius + 1.5f)
+                {
+                    image.SetPixel(x, y, circleColor);
+                }
+
+                // Draw center dot
+                if (distance <= 2)
+                {
+                    image.SetPixel(x, y, centerColor);
+                }
+            }
+        }
+
+        // Add cross lines inside circle
+        for (int i = -10; i <= 10; i++)
+        {
+            if (Mathf.Abs(i) > 3) // Gap in center
+            {
+                image.SetPixel((int)centerX + i, (int)centerY, circleColor);
+                image.SetPixel((int)centerX, (int)centerY + i, circleColor);
+            }
+        }
+
+        var texture = ImageTexture.CreateFromImage(image);
+        var textureRect = new TextureRect();
+        textureRect.Texture = texture;
+        textureRect.Position = new Vector2(-24, -24);
+
+        return textureRect;
+    }
+
+    public void SetCrosshairVisible(bool visible)
+    {
+        if (shipCrosshair != null)
+            shipCrosshair.Visible = visible;
+    }
+
+    public void ShowBulletCrosshair(bool show)
+    {
+        if (bulletCrosshair != null)
+            bulletCrosshair.Visible = show;
+    }
+
+    private void SetupCamera()
+    {
+        // Get existing camera rig from scene
+        cameraRig = GetNodeOrNull<Node3D>("CameraRig");
+        if (cameraRig == null)
+        {
+            cameraRig = new Node3D();
+            AddChild(cameraRig);
+        }
+
+        playerCamera = cameraRig.GetNodeOrNull<Camera3D>("Camera3D");
+        if (playerCamera == null)
+        {
+            playerCamera = new Camera3D();
+            playerCamera.Position = new Vector3(0, cameraHeight, -cameraDistance);
+            playerCamera.LookAtFromPosition(playerCamera.Position, Vector3.Zero, Vector3.Up);
+            playerCamera.Fov = 75;
+            cameraRig.AddChild(playerCamera);
+        }
+
+        UpdateCameraState();
+    }
+
+    private void UpdateCameraState()
+    {
+        if (playerCamera != null)
+        {
+            playerCamera.Current = IsMultiplayerAuthority();
+        }
+    }
+
+    public void DisableCamera()
+    {
+        if (playerCamera != null && IsMultiplayerAuthority())
+            playerCamera.Current = false;
+    }
+
+    public void EnableCamera()
+    {
+        if (playerCamera != null && IsMultiplayerAuthority())
+            playerCamera.Current = true;
+    }
+
+    public override void _Input(InputEvent @event)
+    {
+        if (!IsMultiplayerAuthority()) return;
+
+        // Don't process mouse input if controlling bullet
+        if (activeBullet != null) return;
+
+        if (@event is InputEventMouseMotion mouseMotion)
+        {
+            mouseRotation.X -= mouseMotion.Relative.X * mouseSensitivity;
+            mouseRotation.Y -= mouseMotion.Relative.Y * mouseSensitivity;
+            mouseRotation.Y = Mathf.Clamp(mouseRotation.Y, -1.5f, 1.5f); // Limit vertical look
+        }
     }
 
     public override void _PhysicsProcess(double delta)
@@ -59,21 +288,32 @@ public partial class PlayerShip : RigidBody3D
         {
             HandleInput();
 
+            // Apply mouse rotation to ship
+            if (activeBullet == null) // Only rotate ship when not controlling bullet
+            {
+                GlobalRotation = new Vector3(0, mouseRotation.X, 0);
+            }
+
+            UpdateCamera((float)delta);
+
             // Send input state to other players
             Rpc(MethodName.UpdatePlayerState, GlobalPosition, GlobalRotation, LinearVelocity, inputVector, isFiring);
         }
 
-        // Apply movement (for local player)
+        // Apply movement
         if (IsMultiplayerAuthority())
         {
             ApplyMovement((float)delta);
-        }
 
-        // Handle firing
-        if (isFiring && Time.GetUnixTimeFromSystem() - lastFireTime > fireRate)
-        {
-            Fire();
-            lastFireTime = (float)Time.GetUnixTimeFromSystem();
+            bool currentFirePressed = Input.IsActionPressed("fire");
+
+            // Fire only on button press, not hold
+            if (currentFirePressed && !fireButtonPressed && canFire && activeBullet == null)
+            {
+                Fire();
+            }
+
+            fireButtonPressed = currentFirePressed;
         }
 
         // World wrapping
@@ -85,40 +325,49 @@ public partial class PlayerShip : RigidBody3D
         }
     }
 
+    private void UpdateCamera(float delta)
+    {
+        if (cameraRig == null || playerCamera == null || activeBullet != null) return;
+
+        // Camera follows ship rotation with some vertical tilt
+        var targetRotation = new Vector3(mouseRotation.Y, GlobalRotation.Y, 0);
+        cameraRig.GlobalRotation = cameraRig.GlobalRotation.Lerp(targetRotation, cameraSmoothness * delta);
+    }
+
     private void HandleInput()
     {
         inputVector = Vector2.Zero;
 
-        // Rotation
+        // Don't allow ship control while controlling bullet
+        if (activeBullet != null)
+        {
+            isFiring = false;
+            return;
+        }
+
+        // Rotation with keys (backup for mouse)
         if (Input.IsActionPressed("turn_left"))
-            inputVector.X = -1;
+            mouseRotation.X += rotationSpeed * (float)GetPhysicsProcessDeltaTime();
         else if (Input.IsActionPressed("turn_right"))
-            inputVector.X = 1;
+            mouseRotation.X -= rotationSpeed * (float)GetPhysicsProcessDeltaTime();
 
         // Thrust
         if (Input.IsActionPressed("thrust"))
             inputVector.Y = 1;
 
-        // Fire
-        isFiring = Input.IsActionPressed("fire");
+        // Note: Fire is handled separately with button state tracking
     }
 
     private void ApplyMovement(float delta)
     {
-        // Rotation
-        if (inputVector.X != 0)
-        {
-            var rotation = Transform.Basis.GetEuler();
-            rotation.Y -= inputVector.X * rotationSpeed * delta;
-            Transform = Transform.LookingAt(GlobalPosition + Transform.Basis.Z, Vector3.Up);
-            RotateY(-inputVector.X * rotationSpeed * delta);
-        }
+        // Don't move ship while controlling bullet
+        if (activeBullet != null) return;
 
         // Thrust
         if (inputVector.Y > 0)
         {
-            var forward = -Transform.Basis.Z;
-            ApplyCentralForce(forward * thrustPower * delta);
+            var forward = -cameraRig.GlobalTransform.Basis.Z;
+            ApplyCentralForce(forward * thrustPower);
 
             // Clamp max speed
             if (LinearVelocity.Length() > maxSpeed)
@@ -130,30 +379,47 @@ public partial class PlayerShip : RigidBody3D
 
     private void Fire()
     {
-        if (bulletScene == null) return;
+        if (bulletScene == null || !canFire || activeBullet != null) return;
+        GD.Print($"Player {playerId} (ID: {Multiplayer.GetUniqueId()}) firing bullet");
 
-        var bullet = bulletScene.Instantiate<Node3D>();
+        canFire = false;
+
+        var bullet = bulletScene.Instantiate<ControllableBullet>();
+        bullet.SetMultiplayerAuthority(Multiplayer.GetUniqueId()); // Use actual network ID
+
         GetTree().Root.AddChild(bullet);
 
-        bullet.GlobalPosition = GlobalPosition + -Transform.Basis.Z * 2.0f;
-        bullet.GlobalRotation = GlobalRotation;
+        var firingDirection = -cameraRig.GlobalTransform.Basis.Z;
+        bullet.GlobalPosition = GlobalPosition + firingDirection * 2.0f;
+        bullet.GlobalRotation = cameraRig.GlobalRotation;
 
-        if (bullet.HasMethod("Initialize"))
-        {
-            bullet.Call("Initialize", playerId, -Transform.Basis.Z, playerColor);
-        }
+        // Initialize bullet with reference to this ship
+        bullet.Initialize(playerId, firingDirection, playerColor, this, cameraRig.GlobalRotation);
+
+
+        // Track active bullet
+        activeBullet = bullet;
 
         // Sync bullet creation across network
+        Rpc(MethodName.SpawnBullet, GlobalPosition, cameraRig.GlobalRotation, firingDirection);
+
+    }
+
+    public void OnBulletDestroyed()
+    {
+        activeBullet = null;
+        canFire = true;
+
+        // Re-enable camera
         if (IsMultiplayerAuthority())
         {
-            Rpc(MethodName.SpawnBullet, GlobalPosition, GlobalRotation, -Transform.Basis.Z);
+            EnableCamera();
         }
     }
 
     [Rpc(MultiplayerApi.RpcMode.AnyPeer, CallLocal = false, TransferMode = MultiplayerPeer.TransferModeEnum.UnreliableOrdered)]
     private void UpdatePlayerState(Vector3 position, Vector3 rotation, Vector3 velocity, Vector2 input, bool firing)
     {
-        // Interpolate position and rotation for smooth movement
         GlobalPosition = GlobalPosition.Lerp(position, 0.1f);
         GlobalRotation = rotation;
         LinearVelocity = velocity;
@@ -166,25 +432,36 @@ public partial class PlayerShip : RigidBody3D
     {
         if (bulletScene == null) return;
 
-        var bullet = bulletScene.Instantiate<Node3D>();
+        var bullet = bulletScene.Instantiate<ControllableBullet>();
         GetTree().Root.AddChild(bullet);
 
-        bullet.GlobalPosition = position;
-        bullet.GlobalRotation = rotation;
+        bullet.GlobalPosition = position + direction * 2.0f;
 
         if (bullet.HasMethod("Initialize"))
         {
-            bullet.Call("Initialize", playerId, direction, playerColor);
+            bullet.Call("Initialize", playerId, direction, playerColor, this, rotation);
         }
     }
 
     private void CreateShipMesh()
     {
-        // Create a simple triangle ship mesh
+        // Use the existing mesh from the scene if available
+        if (meshInstance.Mesh != null)
+        {
+            // Apply color to existing mesh
+            meshInstance.MaterialOverride = new StandardMaterial3D
+            {
+                AlbedoColor = playerColor,
+                Metallic = 0.3f,
+                Roughness = 0.7f
+            };
+            return;
+        }
+
+        // Create a simple triangle ship mesh if no mesh exists
         var arrays = new Godot.Collections.Array();
         arrays.Resize((int)Mesh.ArrayType.Max);
 
-        // Triangle vertices for a simple ship shape
         var vertices = new Vector3[]
         {
             new Vector3(0, 0, -1.5f),  // Front
@@ -201,7 +478,6 @@ public partial class PlayerShip : RigidBody3D
             new Vector2(0.5f, 0.5f)
         };
 
-        // Define triangles
         var indices = new int[]
         {
             0, 1, 2,  // Bottom
@@ -224,19 +500,14 @@ public partial class PlayerShip : RigidBody3D
             Metallic = 0.3f,
             Roughness = 0.7f
         };
-
-        // Add collision shape
-        var collision = new CollisionShape3D();
-        var shape = new ConvexPolygonShape3D();
-        shape.Points = vertices;
-        collision.Shape = shape;
-        AddChild(collision);
     }
 
     public void SetPlayerId(int id)
     {
         playerId = id;
         SetMultiplayerAuthority(id);
+        if (IsNodeReady())
+            UpdateCameraState();
     }
 
     public void SetPlayerColor(Color color)
@@ -248,47 +519,17 @@ public partial class PlayerShip : RigidBody3D
         }
     }
 
-    private void SetupCamera()
+    public int GetPlayerId()
     {
-        // Create camera rig for smooth following
-        cameraRig = new Node3D();
-        AddChild(cameraRig);
-
-        // Create camera
-        playerCamera = new Camera3D();
-        playerCamera.Position = new Vector3(0, cameraHeight, cameraDistance);
-        playerCamera.LookAt(Vector3.Zero, Vector3.Up);
-        playerCamera.Fov = 75;
-        cameraRig.AddChild(playerCamera);
-
-        // Only enable camera for the local player
-        UpdateCameraState();
+        return playerId;
     }
 
-    private void UpdateCameraState()
+    public void Die()
     {
-        if (playerCamera != null)
-        {
-            // Enable camera only for the player who owns this ship
-            playerCamera.Current = IsMultiplayerAuthority();
-
-            // Also disable the main scene camera if this is our ship
-            if (IsMultiplayerAuthority())
-            {
-                var mainCamera = GetNode<Camera3D>("/root/Main/Camera3D");
-                if (mainCamera != null)
-                    mainCamera.Current = false;
-            }
-        }
+        EmitSignal(SignalName.Hit);
     }
-    
-        private void UpdateCamera(float delta)
+    private void OnBulletDetectorBodyEntered(Node3D body)
     {
-        if (cameraRig == null || playerCamera == null) return;
-        
-        // Smooth camera follow
-        var targetRotation = GlobalRotation;
-        cameraRig.GlobalRotation = cameraRig.GlobalRotation.Lerp(targetRotation, cameraSmoothness * delta);
-        
+        Die();
     }
 }

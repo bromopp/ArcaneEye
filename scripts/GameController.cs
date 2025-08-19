@@ -4,7 +4,6 @@ using System;
 public partial class GameController : Node
 {
 	[Export] private NodePath worldGeneratorPath;
-	[Export] private NodePath cameraPath;
 	
 	// UI Controls
 	[Export] private NodePath worldSizeSliderPath;
@@ -16,30 +15,16 @@ public partial class GameController : Node
 	[Export] private NodePath showGridCheckPath;
 	[Export] private NodePath generateButtonPath;
 	
-
-	
 	private WorldGenerator worldGenerator;
-	private Camera3D camera;
 	private bool isPaused = false;
-	
-	// Camera control
-	private float cameraSensitivity = 0.002f;
-	private float cameraSpeed = 50.0f;
-	private Vector2 cameraRotation = Vector2.Zero;
 	
 	public override void _Ready()
 	{
-		
 		// Get references
 		worldGenerator = GetNode<WorldGenerator>(worldGeneratorPath);
-		camera = GetNode<Camera3D>(cameraPath);
 		
 		// Set up UI connections
 		SetupUI();
-		
-		// Capture mouse
-		Input.MouseMode = Input.MouseModeEnum.Captured;
-
 	}
 	
 	private void SetupUI()
@@ -91,63 +76,25 @@ public partial class GameController : Node
 		
 		// Regenerate world
 		worldGenerator.GenerateWorld();
-		
-		// Reset camera position
-		camera.Position = new Vector3(0, 0, (float)worldSizeSlider.Value * 0.8f);
-		camera.Rotation = Vector3.Zero;
-		cameraRotation = Vector2.Zero;
 	}
 	
 	public override void _Input(InputEvent @event)
 	{
-		if (@event is InputEventMouseMotion mouseMotion && Input.MouseMode == Input.MouseModeEnum.Captured)
+		if (@event is InputEventKey keyEvent && keyEvent.Pressed)
 		{
-			cameraRotation.X -= mouseMotion.Relative.X * cameraSensitivity;
-			cameraRotation.Y -= mouseMotion.Relative.Y * cameraSensitivity;
-			cameraRotation.Y = Mathf.Clamp(cameraRotation.Y, -Mathf.Pi / 2.0f, Mathf.Pi / 2.0f);
-		}
-		else if (@event is InputEventKey keyEvent && keyEvent.Pressed)
-		{
-
-		if (keyEvent.Keycode == Key.Escape)
+			if (keyEvent.Keycode == Key.Escape)
 			{
+				// Toggle mouse for menu access
 				if (Input.MouseMode == Input.MouseModeEnum.Captured)
 					Input.MouseMode = Input.MouseModeEnum.Visible;
 				else
 					Input.MouseMode = Input.MouseModeEnum.Captured;
-			}else if (keyEvent.Keycode == Key.P)
+			}
+			else if (keyEvent.Keycode == Key.P)
 			{
 				isPaused = !isPaused;
 				GetTree().Paused = isPaused;
 			}
 		}
-	}
-	
-	public override void _Process(double delta)
-	{
-		// Update camera rotation
-		// camera.Rotation = new Vector3(cameraRotation.Y, cameraRotation.X, 0);
-		
-		// // Camera movement
-		// Vector3 velocity = Vector3.Zero;
-		
-		// if (Input.IsActionPressed("move_forward"))
-		// 	velocity -= camera.Transform.Basis.Z;
-		// if (Input.IsActionPressed("move_back"))
-		// 	velocity += camera.Transform.Basis.Z;
-		// if (Input.IsActionPressed("move_left"))
-		// 	velocity -= camera.Transform.Basis.X;
-		// if (Input.IsActionPressed("move_right"))
-		// 	velocity += camera.Transform.Basis.X;
-		// if (Input.IsActionPressed("move_up"))
-		// 	velocity += Vector3.Up;
-		// if (Input.IsActionPressed("move_down"))
-		// 	velocity -= Vector3.Up;
-		
-		// if (velocity.Length() > 0)
-		// {
-		// 	velocity = velocity.Normalized() * cameraSpeed * (float)delta;
-		// 	camera.Position += velocity;
-		// }
 	}
 }

@@ -1,6 +1,7 @@
 using Godot;
 using Microsoft.VisualBasic;
 using System.Collections.Generic;
+using System.Runtime.CompilerServices;
 
 public partial class NetworkManager : Node
 {
@@ -11,6 +12,8 @@ public partial class NetworkManager : Node
     private ENetMultiplayerPeer peer;
     private MultiplayerApi multiplayer;
 
+    public static NetworkManager Instance { get; private set; }
+
     // Player management
     private Dictionary<int, PlayerInfo> players = new Dictionary<int, PlayerInfo>();
     private Dictionary<int, Node3D> playerShips = new Dictionary<int, Node3D>();
@@ -19,13 +22,8 @@ public partial class NetworkManager : Node
     [Export] private Node3D playersContainer;
     [Export] private WorldGenerator worldGenerator;
 
-    // UI References
-    [Export] private Control mainMenu;
-    [Export] private Control gameUI;
-    [Export] private LineEdit playerNameInput;
-    [Export] private LineEdit ipAddressInput;
-    [Export] private Label connectionStatus;
-    [Export] private ItemList playerList;
+    // UI Manager reference
+    private UIManager uiManager;
 
     [Signal]
     public delegate void PlayerConnectedEventHandler(int id, string name, Color color);
@@ -41,18 +39,36 @@ public partial class NetworkManager : Node
         public string Name { get; set; }
         public Color Color { get; set; }
         public bool IsReady { get; set; }
+        public int Lives { get; set; }
 
-        public PlayerInfo(string name = "Player", Color? color = null)
+        public PlayerInfo(string name = "Player", Color? color = null, int lives = 3)
         {
             Name = name;
             Color = color ?? new Color(GD.Randf(), GD.Randf(), GD.Randf());
             IsReady = false;
+            Lives = lives;
         }
     }
 
     public override void _Ready()
     {
+        // Simple singleton pattern - first one wins
+        if (Instance == null)
+        {
+            Instance = this;
+            GD.Print($"NetworkManager singleton initialized from: {GetPath()}");
+        }
+        else
+        {
+            GD.Print($"NetworkManager already exists at: {Instance.GetPath()}. Current instance at: {GetPath()} will be destroyed.");
+            QueueFree();
+            return;
+        }
+        
         peer = new ENetMultiplayerPeer();
+
+        // Get UI Manager reference with retry
+        InitializeUIManager();
 
         // Connect multiplayer signals
         Multiplayer.PeerConnected += OnPeerConnected;
@@ -61,22 +77,55 @@ public partial class NetworkManager : Node
         Multiplayer.ConnectionFailed += OnConnectionFailed;
         Multiplayer.ServerDisconnected += OnServerDisconnected;
 
-        // Set default IP in UI if available
-        if (ipAddressInput != null)
-            ipAddressInput.Text = IP_ADDRESS;
+        // Set up UI
+        SetupUI();
+    }
 
-        // Connect UI buttons if they exist
-        var hostButton = GetNode<Button>("../UI/MainMenu/CenterContainer/VBoxContainer/HostSection/HostButton");
-        if (hostButton != null)
-            hostButton.Pressed += StartServer;
+    private void InitializeUIManager()
+    {
+        uiManager = UIManager.Instance;
+        
+        if (uiManager == null)
+        {
+            GD.PrintErr("UIManager not found! Attempting to find UIManager in scene tree...");
+            
+            // Try to find UIManager in the scene tree as a fallback
+            var uiManagerNode = GetTree().GetFirstNodeInGroup("ui_manager");
+            if (uiManagerNode is UIManager foundUIManager)
+            {
+                uiManager = foundUIManager;
+                UIManager.Instance = foundUIManager; // Update the singleton reference
+                GD.Print("Found UIManager in scene tree and updated singleton reference");
+            }
+            else
+            {
+                // Last resort: try to find by name
+                uiManagerNode = GetNode<UIManager>("/root/Main/UIManager");
+                if (uiManagerNode != null)
+                {
+                    uiManager = (UIManager)uiManagerNode;
+                    UIManager.Instance = (UIManager)uiManagerNode;
+                    GD.Print("Found UIManager by path and updated singleton reference");
+                }
+                else
+                {
+                    GD.PrintErr("UIManager could not be found! UI functionality will be limited.");
+                }
+            }
+        }
+    }
 
-        var joinButton = GetNode<Button>("../UI/MainMenu/CenterContainer/VBoxContainer/JoinSection/JoinButton");
-        if (joinButton != null)
-            joinButton.Pressed += StartClient;
+    private void SetupUI()
+    {
+        if (uiManager == null) return;
 
-        var disconnectButton = GetNode<Button>("../UI/GameUI/Panel/VBoxContainer/DisconnectButton");
-        if (disconnectButton != null)
-            disconnectButton.Pressed += Disconnect;
+        // Set default IP address
+        uiManager.SetDefaultIPAddress(IP_ADDRESS);
+
+        // Connect UI buttons
+        uiManager.ConnectHostButton(StartServer);
+        uiManager.ConnectJoinButton(StartClient);
+        uiManager.ConnectDisconnectButton(Disconnect);
     }
 
     // Server functions
@@ -86,17 +135,20 @@ public partial class NetworkManager : Node
         if (error != Error.Ok)
         {
             GD.PrintErr($"Failed to create server: {error}");
-            UpdateConnectionStatus($"Failed to create server: {error}");
+            uiManager.UpdateConnectionStatus($"Failed to create server: {error}");
             return;
         }
 
         Multiplayer.MultiplayerPeer = peer;
         GD.Print($"Server started on port {PORT}");
-        UpdateConnectionStatus($"Server running on port {PORT}");
+        uiManager?.UpdateConnectionStatus($"Server running on port {PORT}");
 
         // Add server player
-        var serverInfo = new PlayerInfo(playerNameInput?.Text ?? "Host");
+        var serverInfo = new PlayerInfo(uiManager?.GetPlayerName() ?? "Host");
         AddPlayer(1, serverInfo); // Server is always ID 1
+
+        // Generate world with seed
+        worldGenerator.GenerateWorld();
 
         // Start the game
         StartGame();
@@ -105,19 +157,19 @@ public partial class NetworkManager : Node
     // Client functions
     public void StartClient()
     {
-        var address = ipAddressInput?.Text ?? IP_ADDRESS;
+        var address = uiManager?.GetIPAddress() ?? IP_ADDRESS;
         var error = peer.CreateClient(address, PORT);
 
         if (error != Error.Ok)
         {
             GD.PrintErr($"Failed to connect to server: {error}");
-            UpdateConnectionStatus($"Failed to connect: {error}");
+            uiManager?.UpdateConnectionStatus($"Failed to connect: {error}");
             return;
         }
 
         Multiplayer.MultiplayerPeer = peer;
         GD.Print($"Connecting to {address}:{PORT}");
-        UpdateConnectionStatus($"Connecting to {address}:{PORT}...");
+        uiManager?.UpdateConnectionStatus($"Connecting to {address}:{PORT}...");
     }
 
     // Connection event handlers
@@ -134,10 +186,10 @@ public partial class NetworkManager : Node
                 RpcId(id, MethodName.ReceivePlayerInfo, kvp.Key, kvp.Value.Name, kvp.Value.Color);
             }
 
-            // Send world configuration
+            // Send world configuration including seed
             RpcId(id, MethodName.ReceiveWorldConfig,
                 worldGenerator.WorldSize,
-                (int)worldGenerator.CurrentWorldType);
+                worldGenerator.WorldSeed);
         }
     }
 
@@ -150,10 +202,10 @@ public partial class NetworkManager : Node
     private void OnConnectedToServer()
     {
         GD.Print("Connected to server!");
-        UpdateConnectionStatus("Connected to server!");
+        uiManager?.UpdateConnectionStatus("Connected to server!");
 
         // Send our player info to server
-        var playerName = playerNameInput?.Text ?? $"Player{GD.Randi() % 1000}";
+        var playerName = uiManager?.GetPlayerName() ?? $"Player{GD.Randi() % 1000}";
         var playerColor = new Color(GD.Randf(), GD.Randf(), GD.Randf());
 
         RpcId(1, MethodName.RegisterPlayer, playerName, playerColor);
@@ -162,13 +214,13 @@ public partial class NetworkManager : Node
     private void OnConnectionFailed()
     {
         GD.PrintErr("Connection failed!");
-        UpdateConnectionStatus("Connection failed!");
+        uiManager?.UpdateConnectionStatus("Connection failed!");
     }
 
     private void OnServerDisconnected()
     {
         GD.Print("Server disconnected!");
-        UpdateConnectionStatus("Server disconnected!");
+        uiManager?.UpdateConnectionStatus("Server disconnected!");
         EmitSignal(SignalName.ServerDisconnected);
 
         // Clean up
@@ -198,10 +250,10 @@ public partial class NetworkManager : Node
     }
 
     [Rpc(MultiplayerApi.RpcMode.Authority, CallLocal = false, TransferMode = MultiplayerPeer.TransferModeEnum.Reliable)]
-    private void ReceiveWorldConfig(float worldSize, int worldType)
+    private void ReceiveWorldConfig(float worldSize, int worldSeed)
     {
         GD.Print($"[{Multiplayer.GetUniqueId()}] Received config from {Multiplayer.GetRemoteSenderId()}");
-        GD.Print($"World size: {worldSize}, Type: {worldType}");
+        GD.Print($"World size: {worldSize}, Seed: {worldSeed}");
 
         if (worldGenerator == null)
         {
@@ -209,10 +261,11 @@ public partial class NetworkManager : Node
             return;
         }
 
-        // Apply world configuration
+        // Apply world configuration (only cube world supported now)
         worldGenerator.Set("worldSize", worldSize);
-        worldGenerator.Set("worldType", worldType); // Pass as int
-        worldGenerator.GenerateWorld();
+
+        // Generate world with the received seed
+        worldGenerator.GenerateWorld(worldSeed);
 
         // Start the game
         StartGame();
@@ -271,8 +324,7 @@ public partial class NetworkManager : Node
     // UI Methods
     private void StartGame()
     {
-        mainMenu?.Hide();
-        gameUI?.Show();
+        uiManager?.ShowGameUI();
     }
 
     private void CleanupGame()
@@ -290,32 +342,13 @@ public partial class NetworkManager : Node
         playerShips.Clear();
 
         // Reset UI
-        mainMenu?.Show();
-        gameUI?.Hide();
+        uiManager?.ShowMainMenu();
         UpdatePlayerList();
-    }
-
-    private void UpdateConnectionStatus(string status)
-    {
-        if (connectionStatus != null)
-            connectionStatus.Text = status;
     }
 
     private void UpdatePlayerList()
     {
-        if (playerList == null) return;
-
-        playerList.Clear();
-        foreach (var kvp in players)
-        {
-            var text = $"{kvp.Value.Name} (ID: {kvp.Key})";
-            if (kvp.Key == 1) text += " [HOST]";
-            if (kvp.Key == Multiplayer.GetUniqueId()) text += " [YOU]";
-
-            playerList.AddItem(text);
-            var idx = playerList.ItemCount - 1;
-            playerList.SetItemCustomBgColor(idx, kvp.Value.Color * 0.3f);
-        }
+        uiManager?.UpdatePlayerList(players, Multiplayer.GetUniqueId());
     }
 
     // Public utility methods
@@ -338,5 +371,123 @@ public partial class NetworkManager : Node
     {
         peer.Close();
         CleanupGame();
+    }
+
+    // Life system methods
+    public Dictionary<int, Node3D> GetPlayerShips()
+    {
+        return playerShips;
+    }
+
+    [Rpc(MultiplayerApi.RpcMode.AnyPeer, CallLocal = false, TransferMode = MultiplayerPeer.TransferModeEnum.Reliable)]
+    public void UpdatePlayerLives(int playerId, int newLives)
+    {
+        if (players.ContainsKey(playerId))
+        {
+            players[playerId].Lives = newLives;
+            GD.Print($"Player {playerId} lives updated to {newLives}");
+
+            // Broadcast life update to all clients if we're the server
+            if (Multiplayer.IsServer())
+            {
+                Rpc(MethodName.ReceivePlayerLivesUpdate, playerId, newLives);
+            }
+        }
+    }
+
+    [Rpc(MultiplayerApi.RpcMode.Authority, CallLocal = false, TransferMode = MultiplayerPeer.TransferModeEnum.Reliable)]
+    private void ReceivePlayerLivesUpdate(int playerId, int newLives)
+    {
+        if (players.ContainsKey(playerId))
+        {
+            players[playerId].Lives = newLives;
+
+            // Update the actual player ship instance too
+            if (playerShips.ContainsKey(playerId) && playerShips[playerId] is PlayerShip ship)
+            {
+                ship.SetCurrentLives(newLives);
+            }
+
+            GD.Print($"Received life update: Player {playerId} now has {newLives} lives");
+        }
+    }
+
+    // Method to respawn a player at a specific position
+    [Rpc(MultiplayerApi.RpcMode.Authority, CallLocal = false, TransferMode = MultiplayerPeer.TransferModeEnum.Reliable)]
+    public void RespawnPlayer(int playerId, Vector3 position)
+    {
+        if (playerShips.ContainsKey(playerId))
+        {
+            var ship = playerShips[playerId];
+            ship.GlobalPosition = position;
+            ship.Set("LinearVelocity", Vector3.Zero);
+            ship.Set("AngularVelocity", Vector3.Zero);
+
+            GD.Print($"Player {playerId} respawned at {position}");
+        }
+    }
+
+    // Method to get a player's current lives
+    public int GetPlayerLives(int playerId)
+    {
+        if (players.ContainsKey(playerId))
+        {
+            return players[playerId].Lives;
+        }
+        return 0;
+    }
+
+    // Method to check if all players (except one) are eliminated
+    public void CheckForGameEnd()
+    {
+        int alivePlayers = 0;
+        int lastAlivePlayer = -1;
+
+        foreach (var kvp in players)
+        {
+            if (kvp.Value.Lives > 0)
+            {
+                alivePlayers++;
+                lastAlivePlayer = kvp.Key;
+            }
+        }
+
+        if (alivePlayers <= 1 && alivePlayers > 0)
+        {
+            // Broadcast winner to all clients
+            var winnerName = players.ContainsKey(lastAlivePlayer) ? players[lastAlivePlayer].Name : "Unknown";
+            Rpc(MethodName.EndGameWithWinner, winnerName);
+            GD.Print($"Game Over! {winnerName} wins!");
+
+        }
+        else if (alivePlayers == 0)
+        {
+            // All players are dead - it's a tie
+            Rpc(MethodName.EndGameWithWinner, "It's a Tie!");
+            GD.Print("Game Over! It's a tie!");
+
+        }
+
+    }
+
+    [Rpc(MultiplayerApi.RpcMode.AnyPeer, CallLocal = true, TransferMode = MultiplayerPeer.TransferModeEnum.Reliable)]
+    public void EndGameWithWinner(string winnerText)
+    {
+        GD.Print($"EndGame called - {winnerText}");
+
+        // Set the winner text on all clients
+        uiManager?.SetWinnerText($"{winnerText} Wins!");
+
+        // Show game over screen
+        uiManager?.ShowGameOver();
+    }
+    
+    public override void _ExitTree()
+    {
+        // Clean up singleton reference when destroyed
+        if (Instance == this)
+        {
+            Instance = null;
+        }
     }
 }

@@ -1,3 +1,4 @@
+using System.Reflection.Metadata;
 using Godot;
 
 public partial class PlayerShip : RigidBody3D
@@ -8,6 +9,8 @@ public partial class PlayerShip : RigidBody3D
     [Export] private float rotationSpeed = 3.0f;
     [Export] private float maxSpeed = 50.0f;
     [Export] private PackedScene bulletScene;
+    [Export] private PackedScene explosionScene;
+    [Export] private PackedScene deathScene;
 
     [Export] private float mouseSensitivity = 0.002f;
 
@@ -51,6 +54,8 @@ public partial class PlayerShip : RigidBody3D
     // State tracking for movement/shooting
     private Vector3 spawnPosition;
     private bool hasMovedSinceSpawn = false;
+    private bool hasShotSinceSpawn = false;
+
 
     public override void _Ready()
     {
@@ -65,6 +70,11 @@ public partial class PlayerShip : RigidBody3D
         }
         // Get world reference
         world = GetNode<WorldGenerator>("/root/Main/WorldGenerator");
+
+
+
+        // Initialize life system
+        InitializeLifeSystem();
 
         // Set up mesh
         meshInstance = GetNode<MeshInstance3D>("MeshInstance3D");
@@ -97,6 +107,39 @@ public partial class PlayerShip : RigidBody3D
         {
             Input.MouseMode = Input.MouseModeEnum.Captured;
         }
+        BodyEntered += OnBodyEntered;
+
+        GD.Print($"[{Name}] Layers: {CollisionLayer}, Mask: {CollisionMask}");
+    }
+    
+    private void InitializeLifeSystem()
+    {
+        // Get lives from NetworkManager
+        if (NetworkManager.Instance != null)
+        {
+            var players = NetworkManager.Instance.GetPlayers();
+            if (players.ContainsKey(playerId))
+            {
+                currentLives = players[playerId].Lives;
+            }
+            else
+            {
+                currentLives = maxLives; // Fallback
+            }
+        }
+        else
+        {
+            currentLives = maxLives; // Fallback
+        }
+        
+        isAlive = true;
+        isImmune = false;
+        immunityTimer = 0.0f;
+        spawnPosition = GlobalPosition;
+        hasMovedSinceSpawn = false;
+        hasShotSinceSpawn = false;
+        
+        GD.Print($"Player {playerId} initialized with {currentLives} lives");
     }
 
     private void SetupCrosshair()
@@ -283,15 +326,25 @@ public partial class PlayerShip : RigidBody3D
 
     public override void _PhysicsProcess(double delta)
     {
-        // Only process input if we have authority
-        if (IsMultiplayerAuthority())
+        // Update immunity timer
+        if (isImmune)
+        {
+            immunityTimer -= (float)delta;
+            if (immunityTimer <= 0.0f)
+            {
+                EndImmunity();
+            }
+        }
+
+        // Only process input if we have authority and we're alive
+        if (IsMultiplayerAuthority() && isAlive)
         {
             HandleInput();
 
             // Apply mouse rotation to ship
             if (activeBullet == null) // Only rotate ship when not controlling bullet
             {
-                GlobalRotation = new Vector3(0, mouseRotation.X, 0);
+                GlobalRotation = new Vector3(mouseRotation.Y, mouseRotation.X,0);
             }
 
             UpdateCamera((float)delta);
@@ -300,9 +353,19 @@ public partial class PlayerShip : RigidBody3D
             Rpc(MethodName.UpdatePlayerState, GlobalPosition, GlobalRotation, LinearVelocity, inputVector, isFiring);
         }
 
-        // Apply movement
-        if (IsMultiplayerAuthority())
+        // Apply movement and check for immunity breaking
+        if (IsMultiplayerAuthority() && isAlive)
         {
+            // Track movement for immunity breaking
+            if (isImmune && !hasMovedSinceSpawn)
+            {
+                if (inputVector.Length() > 0)
+                {
+                    hasMovedSinceSpawn = true;
+                    EndImmunity();
+                }
+            }
+
             ApplyMovement((float)delta);
 
             bool currentFirePressed = Input.IsActionPressed("fire");
@@ -310,10 +373,32 @@ public partial class PlayerShip : RigidBody3D
             // Fire only on button press, not hold
             if (currentFirePressed && !fireButtonPressed && canFire && activeBullet == null)
             {
+                // Track shooting for immunity breaking
+                if (isImmune && !hasShotSinceSpawn)
+                {
+                    hasShotSinceSpawn = true;
+                    EndImmunity();
+                }
                 Fire();
             }
 
             fireButtonPressed = currentFirePressed;
+        }
+
+        // Update bullet velocity display if bullet is active
+        if (IsMultiplayerAuthority())
+        {
+            if (activeBullet != null && IsInstanceValid(activeBullet))
+            {
+                UIManager.Instance?.UpdateBulletVelocity(activeBullet.GetVelocity());
+            }
+            else if (activeBullet != null)
+            {
+                // Bullet reference is invalid, clean it up
+                activeBullet = null;
+                canFire = true;
+                UIManager.Instance?.HideBulletVelocity();
+            }
         }
 
         // World wrapping
@@ -345,7 +430,6 @@ public partial class PlayerShip : RigidBody3D
             return;
         }
 
-        // Rotation with keys (backup for mouse)
         if (Input.IsActionPressed("turn_left"))
             mouseRotation.X += rotationSpeed * (float)GetPhysicsProcessDeltaTime();
         else if (Input.IsActionPressed("turn_right"))
@@ -400,6 +484,12 @@ public partial class PlayerShip : RigidBody3D
         // Track active bullet
         activeBullet = bullet;
 
+        // Show bullet velocity in UI for local player
+        if (IsMultiplayerAuthority())
+        {
+            UIManager.Instance?.ShowBulletVelocity(bullet.GetVelocity());
+        }
+
         // Sync bullet creation across network
         Rpc(MethodName.SpawnBullet, GlobalPosition, cameraRig.GlobalRotation, firingDirection);
 
@@ -410,10 +500,11 @@ public partial class PlayerShip : RigidBody3D
         activeBullet = null;
         canFire = true;
 
-        // Re-enable camera
+        // Re-enable camera and hide bullet velocity
         if (IsMultiplayerAuthority())
         {
             EnableCamera();
+            UIManager.Instance?.HideBulletVelocity();
         }
     }
 
@@ -445,61 +536,71 @@ public partial class PlayerShip : RigidBody3D
 
     private void CreateShipMesh()
     {
-        // Use the existing mesh from the scene if available
-        if (meshInstance.Mesh != null)
-        {
-            // Apply color to existing mesh
-            meshInstance.MaterialOverride = new StandardMaterial3D
-            {
-                AlbedoColor = playerColor,
-                Metallic = 0.3f,
-                Roughness = 0.7f
-            };
-            return;
-        }
-
-        // Create a simple triangle ship mesh if no mesh exists
-        var arrays = new Godot.Collections.Array();
-        arrays.Resize((int)Mesh.ArrayType.Max);
-
-        var vertices = new Vector3[]
-        {
-            new Vector3(0, 0, -1.5f),  // Front
-            new Vector3(-1, 0, 1),     // Left back
-            new Vector3(1, 0, 1),      // Right back
-            new Vector3(0, 0.5f, 0.5f) // Top
-        };
-
-        var uvs = new Vector2[]
-        {
-            new Vector2(0.5f, 0),
-            new Vector2(0, 1),
-            new Vector2(1, 1),
-            new Vector2(0.5f, 0.5f)
-        };
-
-        var indices = new int[]
-        {
-            0, 1, 2,  // Bottom
-            0, 3, 1,  // Left side
-            0, 2, 3,  // Right side
-            1, 3, 2   // Back
-        };
-
-        arrays[(int)Mesh.ArrayType.Vertex] = vertices;
-        arrays[(int)Mesh.ArrayType.TexUV] = uvs;
-        arrays[(int)Mesh.ArrayType.Index] = indices;
-
-        var arrayMesh = new ArrayMesh();
-        arrayMesh.AddSurfaceFromArrays(Mesh.PrimitiveType.Triangles, arrays);
-
-        meshInstance.Mesh = arrayMesh;
-        meshInstance.MaterialOverride = new StandardMaterial3D
+        // Always ensure we have a material with the player color
+        var material = new StandardMaterial3D
         {
             AlbedoColor = playerColor,
             Metallic = 0.3f,
             Roughness = 0.7f
         };
+
+        // Use existing mesh if available, otherwise create fallback
+        if (meshInstance.Mesh != null)
+        {
+            meshInstance.MaterialOverride = material;
+        }
+        else
+        {
+            // Create simple ship shape using built-in primitive
+            var mesh = new BoxMesh
+            {
+                Size = new Vector3(0.8f, 0.4f, 2.0f) // Width, Height, Length
+            };
+            
+            meshInstance.Mesh = mesh;
+            meshInstance.MaterialOverride = material;
+        }
+
+        // Ensure collision shape matches the visual mesh
+        SetupCollisionShape();
+    }
+
+    private void SetupCollisionShape()
+    {
+        var collisionShape = GetNodeOrNull<CollisionShape3D>("CollisionShape3D");
+        if (collisionShape == null)
+        {
+            // Create collision shape if it doesn't exist
+            collisionShape = new CollisionShape3D();
+            collisionShape.Name = "CollisionShape3D";
+            AddChild(collisionShape);
+        }
+
+        // Set collision shape to match the mesh
+        if (meshInstance.Mesh != null)
+        {
+            if (meshInstance.Mesh is BoxMesh boxMesh)
+            {
+                // Use BoxShape3D for BoxMesh
+                var boxShape = new BoxShape3D();
+                boxShape.Size = boxMesh.Size;
+                collisionShape.Shape = boxShape;
+            }
+            else
+            {
+                // Use convex shape for other meshes
+                collisionShape.Shape = meshInstance.Mesh.CreateConvexShape();
+                collisionShape.Scale = meshInstance.Scale;
+                collisionShape.Rotation = meshInstance.Rotation;
+            }
+        }
+        else
+        {
+            // Fallback box collision
+            var boxShape = new BoxShape3D();
+            boxShape.Size = new Vector3(0.8f, 0.4f, 2.0f);
+            collisionShape.Shape = boxShape;
+        }
     }
 
     public void SetPlayerId(int id)
@@ -523,13 +624,222 @@ public partial class PlayerShip : RigidBody3D
     {
         return playerId;
     }
+    
+    public int GetCurrentLives()
+    {
+        return currentLives;
+    }
+    
+    public void SetCurrentLives(int lives)
+    {
+        currentLives = lives;
+        GD.Print($"Player {playerId} lives set to {currentLives}");
+    }
 
     public void Die()
     {
+        // Don't process death if already dead or immune
+        if (!isAlive || isImmune) return;
+        
+        GD.Print($"Player {playerId} hit! Lives remaining: {currentLives - 1}");
+        
+        // Create explosion at current position
+
+        ShowDeathScreen();
+        // Decrease lives
+        currentLives--;
+        
+        // Update lives in NetworkManager
+        if (NetworkManager.Instance != null && IsMultiplayerAuthority())
+        {
+            NetworkManager.Instance.UpdatePlayerLives(playerId, currentLives);
+        }
+        
         EmitSignal(SignalName.Hit);
+        
+        // Check if player has lives left
+        if (currentLives > 0)
+        {
+            // Respawn with immunity
+            CallDeferred(MethodName.Respawn);
+        }
+        else
+        {
+            // Game over
+            HandleGameOver();
+        }
     }
-    private void OnBulletDetectorBodyEntered(Node3D body)
+    private void ShowDeathScreen()
     {
+        if (IsMultiplayerAuthority())
+        {
+            var death = deathScene.Instantiate();
+            GetTree().Root.AddChild(death);
+        }
+        
+    }
+    private void CreateExplosion()
+    {
+        if (explosionScene == null) return;
+        
+        var explosion = explosionScene.Instantiate<Explosion>();
+        explosion.GlobalPosition = GlobalPosition;
+        
+        // Add to scene tree
+        GetTree().Root.AddChild(explosion);
+        
+        // Start explosion effect
+        _ = explosion.Explode();
+        
+        GD.Print($"Explosion created at {GlobalPosition} for player {playerId}");
+    }
+    
+    private void Respawn()
+    {
+        GD.Print($"Respawning player {playerId} with {currentLives} lives");
+        
+        // Find safe spawn position away from other players
+        Vector3 spawnPos = FindSafeSpawnPosition();
+        
+        // Reset player state
+        GlobalPosition = spawnPos;
+        spawnPosition = spawnPos;
+        LinearVelocity = Vector3.Zero;
+        AngularVelocity = Vector3.Zero;
+        
+        // Reset movement tracking
+        hasMovedSinceSpawn = false;
+        hasShotSinceSpawn = false;
+        
+        // Start immunity period
+        StartImmunity();
+        
+        isAlive = true;
+        
+        GD.Print($"Player {playerId} respawned at {spawnPos}");
+    }
+    
+    private Vector3 FindSafeSpawnPosition()
+    {
+        var worldSize = world.WorldSize;
+        var spawnRadius = worldSize * 0.4f;
+        if (NetworkManager.Instance == null || world == null)
+        {
+            // Fallback to random position
+            return new Vector3(
+                GD.Randf() * spawnRadius - spawnRadius / 2,
+                GD.Randf() * spawnRadius - spawnRadius / 2,
+                GD.Randf() * spawnRadius - spawnRadius / 2
+            );
+        }
+        
+        var players = NetworkManager.Instance.GetPlayers();
+        
+        
+        var minDistance = worldSize * 0.1f; // Minimum distance from other players
+        
+        Vector3 bestPosition = Vector3.Zero;
+        float maxMinDistance = 0.0f;
+        
+        // Try multiple random positions and pick the one farthest from other players
+        for (int attempt = 0; attempt < 20; attempt++)
+        {
+            var candidatePos = new Vector3(
+                GD.Randf() * spawnRadius - spawnRadius / 2,
+                GD.Randf() * spawnRadius - spawnRadius / 2,
+                GD.Randf() * spawnRadius - spawnRadius / 2
+            );
+            
+            float minDistanceToOthers = float.MaxValue;
+            
+            // Check distance to all other players
+            foreach (var kvp in players)
+            {
+                if (kvp.Key == playerId) continue; // Skip self
+                
+                // Try to get player ship position
+                var playerShips = NetworkManager.Instance.GetPlayerShips();
+                if (playerShips.ContainsKey(kvp.Key))
+                {
+                    var otherPlayerPos = playerShips[kvp.Key].GlobalPosition;
+                    var distance = candidatePos.DistanceTo(otherPlayerPos);
+                    minDistanceToOthers = Mathf.Min(minDistanceToOthers, distance);
+                }
+            }
+            
+            // If this position is farther from others than our current best, use it
+            if (minDistanceToOthers > maxMinDistance)
+            {
+                maxMinDistance = minDistanceToOthers;
+                bestPosition = candidatePos;
+            }
+            
+            // If we found a position with good separation, use it
+            if (minDistanceToOthers >= minDistance)
+            {
+                break;
+            }
+        }
+        
+        return bestPosition;
+    }
+    
+    private void StartImmunity()
+    {
+        isImmune = true;
+        immunityTimer = immunityDuration;
+        SetImmunityVisual(true);
+        
+        GD.Print($"Player {playerId} is now immune for {immunityDuration} seconds");
+    }
+    
+    private void EndImmunity()
+    {
+        isImmune = false;
+        immunityTimer = 0.0f;
+        SetImmunityVisual(false);
+        
+        GD.Print($"Player {playerId} immunity ended");
+    }
+    
+    private void HandleGameOver()
+    {
+        isAlive = false;
+        GD.Print($"Player {playerId} is out of lives! Game Over.");
+        
+        // Hide the ship (or handle game over state)
+        Visible = false;
+        
+        // Disable input processing
+        SetPhysicsProcess(false);
+
+        NetworkManager.Instance.CheckForGameEnd();
+   
+    }
+    private void OnBodyEntered(Node body)
+    {
+        GD.Print($"Player {playerId} detected {body}");
+
+        // Don't take damage if immune or not alive
+        if (isImmune || !isAlive) return;
+        
+        // Check if it's a bullet (not another player ship or asteroid)
+        if (body is ControllableBullet bullet)
+        {
+            // Don't hit yourself with your own bullet
+            var bulletOwnerId = bullet.GetOwnerId();
+            if (bulletOwnerId == playerId) return;
+        }
+        
+        // Process the hit
         Die();
+    }
+    private void SetImmunityVisual(bool immune)
+    {
+        if (meshInstance?.MaterialOverride is StandardMaterial3D material)
+        {
+            material.Transparency = immune ? BaseMaterial3D.TransparencyEnum.Alpha : BaseMaterial3D.TransparencyEnum.Disabled;
+            material.AlbedoColor = new Color(playerColor.R, playerColor.G, playerColor.B, immune ? 0.5f : 1.0f);
+        }
     }
 }

@@ -13,7 +13,7 @@ public partial class Explosion : Node3D
 	[Export] private GpuParticles3D Fire;
 	[Export] private AudioStreamPlayer3D ExplosionSound;
 
-	private async Task Explode()
+	public async Task Explode()
 	{
 		Debris.Emitting = true;
 		Smoke.Emitting = true;

@@ -1,17 +1,23 @@
 // ControllableBullet.cs - New bullet class with player control
+using System;
 using Godot;
 
 public partial class ControllableBullet : Area3D
 {
     [Export] private float speed = 20.0f;
-    [Export] private float lifetime = 5.0f; // Longer lifetime for controlled bullets
+    [Export] private float lifetime = 3.0f; // Longer lifetime for controlled bullets
+    [Export] private float rampUpTime = 1.5f; // Time to reach max speed
+
     [Export] private float rotationSpeed = 2.0f;
-    [Export] private float cameraDistance = 8.0f;
-    [Export] private float cameraHeight = 2.0f;
+    [Export] private float cameraDistance = 3.215f;
+    [Export] private float cameraHeight = 1.0f;
 
     [Export] private PackedScene explosionScene;
 
     private Vector3 velocity;
+    private float currentSpeed = 0.0f; // Current speed magnitude
+    private Vector3 direction = Vector3.Forward; // Current direction
+
     private int ownerId = -1;
     private Color bulletColor = Colors.White;
     private float aliveTime = 0.0f;
@@ -21,21 +27,12 @@ public partial class ControllableBullet : Area3D
     private PlayerShip ownerShip;
     private Vector2 mouseRotation = Vector2.Zero;
     private bool isControlled = false;
-
+    private WorldGenerator world;
     public override void _Ready()
     {
-        // Set up collision
-        CollisionLayer = 1 << 1;  // Bullet layer
-        CollisionMask = (1 << 2) | (1 << 3);  // Detect asteroids and players
 
         // Create visual
-        CreateBulletMesh();
-
-        // Create collision shape
-        var collision = new CollisionShape3D();
-        var shape = new SphereShape3D { Radius = 0.2f };
-        collision.Shape = shape;
-        AddChild(collision);
+        world = GetNode<WorldGenerator>("/root/Main/WorldGenerator");
 
         // Set up camera
         if (IsMultiplayerAuthority())
@@ -52,35 +49,16 @@ public partial class ControllableBullet : Area3D
         // Add particle trail to bullet
         var trail = new CpuParticles3D();
         trail.Amount = 50;
-        trail.Lifetime = 0.5f;
+        trail.Lifetime = 1.0f;
         trail.EmissionShape = CpuParticles3D.EmissionShapeEnum.Point;
         trail.Direction = Vector3.Back;
-        trail.InitialVelocityMin = 5.0f;
+        trail.InitialVelocityMin = 2.0f;
         trail.Scale = Vector3.One * 0.1f;
         AddChild(trail);
+
+        GD.Print($"[{Name}] Layers: {CollisionLayer}, Mask: {CollisionMask}");
     }
 
-    private void CreateBulletMesh()
-    {
-        var meshInstance = new MeshInstance3D();
-        AddChild(meshInstance);
-
-        // Create a more interesting bullet shape
-        var capsuleMesh = new CapsuleMesh();
-        capsuleMesh.Height = 0.8f;
-        capsuleMesh.Radius = 0.15f;
-
-        meshInstance.Mesh = capsuleMesh;
-        meshInstance.Rotation = new Vector3(Mathf.Pi / 2, 0, 0); // Point forward
-
-        meshInstance.MaterialOverride = new StandardMaterial3D
-        {
-            AlbedoColor = bulletColor,
-            EmissionEnabled = true,
-            Emission = bulletColor,
-            EmissionIntensity = 3.0f
-        };
-    }
 
     private void SetupCamera()
     {
@@ -90,7 +68,7 @@ public partial class ControllableBullet : Area3D
 
         // Create camera
         bulletCamera = new Camera3D();
-        bulletCamera.Position = new Vector3(0, cameraHeight, -cameraDistance);
+        bulletCamera.Position = new Vector3(0, cameraHeight, cameraDistance);
 
         bulletCamera.Fov = 90;
         bulletCamera.Current = false;
@@ -109,7 +87,9 @@ public partial class ControllableBullet : Area3D
     public void Initialize(int playerId, Vector3 startDirection, Color color, PlayerShip ship, Vector3 shipRotation)
     {
         ownerId = playerId;
-        velocity = startDirection.Normalized() * speed;
+        direction = startDirection.Normalized();
+        currentSpeed = 0.0f; // Start from 0 speed
+        velocity = Vector3.Zero; // Will be calculated in _PhysicsProcess
         bulletColor = color;
         ownerShip = ship;
 
@@ -198,16 +178,35 @@ public partial class ControllableBullet : Area3D
 
     public override void _PhysicsProcess(double delta)
     {
+        // Linear speed ramp-up over rampUpTime seconds
+        if (aliveTime < rampUpTime)
+        {
+            // Linear interpolation: speed increases from 0 to max over rampUpTime
+            currentSpeed = (aliveTime / rampUpTime) * speed;
+        }
+        else
+        {
+            currentSpeed = speed; // Reached max speed
+        }
+
         if (IsMultiplayerAuthority() && isControlled)
         {
             // Apply mouse rotation
             Rotation = new Vector3(mouseRotation.Y, mouseRotation.X, 0);
 
-            // Update velocity direction based on rotation
-            velocity = -Transform.Basis.Z * speed;
-
+            // Update direction based on current rotation
+            direction = -Transform.Basis.Z.Normalized();
+            
+            // Calculate velocity: direction * current speed
+            velocity = direction * currentSpeed;
+            
             // Send state to other players
             Rpc(MethodName.UpdateBulletState, GlobalPosition, GlobalRotation, velocity);
+        }
+        else if (!isControlled)
+        {
+            // For non-controlled bullets, just use the direction * current speed
+            velocity = direction * currentSpeed;
         }
 
         // Move bullet
@@ -226,6 +225,14 @@ public partial class ControllableBullet : Area3D
         {
             Explode();
         }
+
+        // World wrapping
+        if (world != null)
+        {
+            var pos = Position;
+            world.WrapPosition(ref pos);
+            Position = pos;
+        }
     }
 
     [Rpc(MultiplayerApi.RpcMode.AnyPeer, CallLocal = false, TransferMode = MultiplayerPeer.TransferModeEnum.UnreliableOrdered)]
@@ -234,10 +241,18 @@ public partial class ControllableBullet : Area3D
         GlobalPosition = GlobalPosition.Lerp(position, 0.2f);
         GlobalRotation = rotation;
         velocity = vel;
+        
+        // Update direction for non-authoritative clients
+        if (vel.Length() > 0.01f)
+        {
+            direction = vel.Normalized();
+        }
     }
 
-    private void OnBodyEntered(Node3D body)
+    private void OnBodyEntered(Node body)
     {
+        GD.Print($"{body} entered bullet");
+
         // Don't hit the owner
         if (body == ownerShip) return;
 
@@ -248,10 +263,7 @@ public partial class ControllableBullet : Area3D
         }
         else if (body is PlayerShip ship)
         {
-            if (ship.HasMethod("Die"))
-            {
-                ship.Call("Die", 25.0f);
-            }
+            ship.Die();
             Explode();
         }
     }
@@ -261,8 +273,21 @@ public partial class ControllableBullet : Area3D
         // Release control before destroying
         ReleaseControl();
 
-        Explosion explosion = explosionScene.Instantiate<Explosion>();
-        // SpawnExplosion(GlobalPosition);
+        // Create explosion at bullet position
+        if (explosionScene != null)
+        {
+            var explosion = explosionScene.Instantiate<Explosion>();
+            var bulletPosition = GlobalPosition; // Store position before QueueFree
+
+            // Add to scene tree first
+            GetTree().Root.AddChild(explosion);
+
+            // Set position after it's in the tree
+            explosion.GlobalPosition = bulletPosition;
+
+            // Trigger explosion effect
+            _ = explosion.Explode();
+        }
 
         // Notify owner ship that bullet is destroyed
         if (ownerShip != null)
@@ -271,6 +296,18 @@ public partial class ControllableBullet : Area3D
         }
 
         QueueFree();
+    }
+
+    // Public method to get the bullet's current velocity
+    public Vector3 GetVelocity()
+    {
+        return velocity;
+    }
+
+    // Public method to get the owner ID
+    public int GetOwnerId()
+    {
+        return ownerId;
     }
 
     public override void _ExitTree()

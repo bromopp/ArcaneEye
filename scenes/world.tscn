@@ -1,12 +1,14 @@
-[gd_scene load_steps=15 format=3 uid="uid://d2y7xe2w3wdwr"]
+[gd_scene load_steps=17 format=3 uid="uid://d2y7xe2w3wdwr"]
 
 [ext_resource type="Shader" uid="uid://b3emxdrsb44o8" path="res://textures/skyBox.gdshader" id="1_rwgxs"]
 [ext_resource type="Script" uid="uid://bnpkmw2jkxxpl" path="res://scripts/WorldGenerator.cs" id="2_4wyf3"]
 [ext_resource type="PackedScene" uid="uid://b143nglsviyq6" path="res://scenes/ui.tscn" id="3_4wyf3"]
 [ext_resource type="PackedScene" uid="uid://cypc4hwce6lr4" path="res://scenes/asteroid.tscn" id="3_k0juu"]
-[ext_resource type="Script" uid="uid://otp3lfl6qf1y" path="res://scripts/GameController.cs" id="5_71j4m"]
 [ext_resource type="Script" uid="uid://bepgotx2k54ue" path="res://scripts/NetworkManager.cs" id="6_qfnet"]
 [ext_resource type="PackedScene" uid="uid://umttfuxbwwsj" path="res://scenes/player_ship.tscn" id="7_i7141"]
+[ext_resource type="FontFile" uid="uid://ctqle61skp841" path="res://assets/LUCON.TTF" id="8_4mrxx"]
+[ext_resource type="Script" uid="uid://c2ywqvt136gg6" path="res://scripts/GameOver.cs" id="8_7r4gi"]
+[ext_resource type="Script" uid="uid://bl035hd2vvq8a" path="res://scripts/UIManager.cs" id="8_w7kh3"]
 
 [sub_resource type="ShaderMaterial" id="ShaderMaterial_71j4m"]
 shader = ExtResource("1_rwgxs")
@@ -62,18 +64,6 @@ offset_left = 902.0
 offset_right = 1152.0
 offset_bottom = 500.0
 
-[node name="GameController" type="Node" parent="."]
-script = ExtResource("5_71j4m")
-worldGeneratorPath = NodePath("../WorldGenerator")
-worldSizeSliderPath = NodePath("../UIOld/Panel/VBoxContainer/HBoxContainer/WorldSizeSlider")
-worldSizeLabelPath = NodePath("../UIOld/Panel/VBoxContainer/HBoxContainer/WorldSizeLabel")
-asteroidCountSliderPath = NodePath("../UIOld/Panel/VBoxContainer/HBoxContainer2/AsteroidCountSlider")
-asteroidCountLabelPath = NodePath("../UIOld/Panel/VBoxContainer/HBoxContainer2/AsteroidCountLabel")
-worldTypeOptionPath = NodePath("../UIOld/Panel/VBoxContainer/WorldTypeButton")
-showBoundsCheckPath = NodePath("../UIOld/Panel/VBoxContainer/ShowBoundsCheck")
-showGridCheckPath = NodePath("../UIOld/Panel/VBoxContainer/ShowGridCheck")
-generateButtonPath = NodePath("../UIOld/Panel/VBoxContainer/GenerateButton")
-
 [node name="WorldEnvironment" type="WorldEnvironment" parent="."]
 environment = SubResource("Environment_i7141")
 
@@ -82,19 +72,17 @@ transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 0, 0, -876.203)
 light_energy = 0.924
 light_specular = 2.166
 
-[node name="NetworkManager" type="Node" parent="." node_paths=PackedStringArray("playersContainer", "worldGenerator", "mainMenu", "gameUI", "playerNameInput", "ipAddressInput", "connectionStatus", "playerList")]
-script = ExtResource("6_qfnet")
-playerShipScene = ExtResource("7_i7141")
-playersContainer = NodePath("../PlayersContainer")
-worldGenerator = NodePath("../WorldGenerator")
-mainMenu = NodePath("../UI/MainMenu")
-gameUI = NodePath("../UI/GameUI")
-playerNameInput = NodePath("../UI/MainMenu/CenterContainer/VBoxContainer/VBoxContainer/LineEdit")
-ipAddressInput = NodePath("../UI/MainMenu/CenterContainer/VBoxContainer/JoinSection/IPAddressInput")
-connectionStatus = NodePath("../UI/MainMenu/CenterContainer/VBoxContainer/ConnectionStatus")
-playerList = NodePath("../UI/GameUI/Panel/VBoxContainer/PlayerList")
-
-[node name="UI" type="CanvasLayer" parent="."]
+[node name="UI" type="CanvasLayer" parent="." node_paths=PackedStringArray("mainMenu", "gameUI", "gameOver", "podiumText", "playerNameInput", "ipAddressInput", "connectionStatus", "playerList", "bulletVelocityLabel")]
+script = ExtResource("8_w7kh3")
+mainMenu = NodePath("MainMenu")
+gameUI = NodePath("GameUI")
+gameOver = NodePath("GameOver")
+podiumText = NodePath("GameOver/podiumText")
+playerNameInput = NodePath("MainMenu/CenterContainer/VBoxContainer/VBoxContainer/LineEdit")
+ipAddressInput = NodePath("MainMenu/CenterContainer/VBoxContainer/JoinSection/IPAddressInput")
+connectionStatus = NodePath("MainMenu/CenterContainer/VBoxContainer/ConnectionStatus")
+playerList = NodePath("GameUI/Panel/VBoxContainer/PlayerList")
+bulletVelocityLabel = NodePath("GameUI/ScorePanel/VBoxContainer/BulletVelocityLabel")
 
 [node name="MainMenu" type="Control" parent="UI"]
 layout_mode = 3
@@ -240,6 +228,87 @@ text = "Lives: 3"
 layout_mode = 2
 text = "Wave: 1"
 
+[node name="BulletVelocityLabel" type="Label" parent="UI/GameUI/ScorePanel/VBoxContainer"]
+layout_mode = 2
+
+[node name="GameOver" type="Control" parent="UI" node_paths=PackedStringArray("backToMenuButton")]
+visible = false
+layout_mode = 3
+anchors_preset = 15
+anchor_right = 1.0
+anchor_bottom = 1.0
+grow_horizontal = 2
+grow_vertical = 2
+size_flags_horizontal = 6
+size_flags_vertical = 6
+script = ExtResource("8_7r4gi")
+backToMenuButton = NodePath("BackMenuButton")
+
+[node name="ColorRect" type="ColorRect" parent="UI/GameOver"]
+layout_mode = 1
+anchors_preset = 15
+anchor_right = 1.0
+anchor_bottom = 1.0
+grow_horizontal = 2
+grow_vertical = 2
+color = Color(0.43134, 0.43134, 0.43134, 1)
+
+[node name="podiumText" type="RichTextLabel" parent="UI/GameOver"]
+custom_minimum_size = Vector2(300, 0)
+layout_mode = 1
+offset_left = 250.0
+offset_top = 369.0
+offset_right = 550.0
+offset_bottom = 439.0
+scale = Vector2(2.12, 1)
+theme_override_fonts/normal_font = ExtResource("8_4mrxx")
+theme_override_font_sizes/normal_font_size = 55
+bbcode_enabled = true
+fit_content = true
+autowrap_mode = 0
+horizontal_alignment = 1
+vertical_alignment = 1
+
+[node name="CenterContainer" type="CenterContainer" parent="UI/GameOver"]
+layout_mode = 1
+anchors_preset = 15
+anchor_right = 1.0
+anchor_bottom = 1.0
+offset_left = -3.0
+offset_top = -55.0
+offset_right = -3.0
+offset_bottom = -55.0
+grow_horizontal = 2
+grow_vertical = 2
+
+[node name="VBoxContainer" type="VBoxContainer" parent="UI/GameOver/CenterContainer"]
+layout_mode = 2
+
+[node name="RichTextLabel" type="RichTextLabel" parent="UI/GameOver/CenterContainer/VBoxContainer"]
+custom_minimum_size = Vector2(300, 0)
+layout_mode = 2
+theme_override_fonts/normal_font = ExtResource("8_4mrxx")
+theme_override_font_sizes/normal_font_size = 55
+text = "Game Over"
+fit_content = true
+horizontal_alignment = 1
+vertical_alignment = 1
+
+[node name="BackMenuButton" type="Button" parent="UI/GameOver"]
+layout_mode = 0
+offset_left = 501.0
+offset_top = 532.0
+offset_right = 640.0
+offset_bottom = 574.0
+theme_override_font_sizes/font_size = 24
+text = "Main Menu"
+
+[node name="NetworkManager" type="Node" parent="." node_paths=PackedStringArray("playersContainer", "worldGenerator")]
+script = ExtResource("6_qfnet")
+playerShipScene = ExtResource("7_i7141")
+playersContainer = NodePath("../PlayersContainer")
+worldGenerator = NodePath("../WorldGenerator")
+
 [node name="PlayersContainer" type="Node3D" parent="."]
 
 [node name="Node3D" type="Node3D" parent="."]
@@ -258,5 +327,7 @@ skeleton = NodePath("../blacksphere")
 transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 0, 3.20281, 0)
 material_override = SubResource("StandardMaterial3D_w7kh3")
 mesh = SubResource("SphereMesh_4mrxx")
+
+[connection signal="pressed" from="UI/GameOver/BackMenuButton" to="UI/GameOver" method="BackMenu"]
 
 [editable path="UIOld"]

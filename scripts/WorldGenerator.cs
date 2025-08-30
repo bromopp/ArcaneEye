@@ -3,38 +3,60 @@ using System.Collections.Generic;
 
 public partial class WorldGenerator : Node3D
 {
+	// Constants
+	private const int PLAYER_GRID_LINES = 8;
+	private const float PLAYER_GRID_PULSE_SPEED = 3.0f;
+	private const float ASTEROID_BOUND_FACTOR = 0.8f;
+	
 	[Export] private float worldSize = 100.0f;
 	[Export] private int asteroidCount = 15;
 	[Export] private bool showWorldBounds = true;
 	[Export] private bool showGrid = true;
 	[Export] private PackedScene asteroidScene;
+	[Export] private float proximityDistance = 10.0f; // Distance to show bounds
+	[Export] private float gridRadius = 10.0f; // Radius for per-player grid visualization
 	
-	public enum WorldType
-	{
-		Cube,
-		Sphere
-	}
+	private int worldSeed;
+	private RandomNumberGenerator rng;
 	
-	[Export] private WorldType worldType = WorldType.Cube;
+	// Per-player grid visualization using shader
+	private MeshInstance3D boundaryGridMesh;
+	private ShaderMaterial gridShaderMaterial;
 	
+	// World components
 	private MeshInstance3D worldBoundsMesh;
-	private MeshInstance3D gridMesh;
 	private List<Asteroid> asteroids = new List<Asteroid>();
 	
 	public float WorldSize => worldSize;
-	public WorldType CurrentWorldType => worldType;
+	public int WorldSeed => worldSeed;
 	
 	public override void _Ready()
 	{
-		GenerateWorld();
+		// Start monitoring player proximity for bounds visibility
+		SetProcess(true);
+		
+		// Initialize shader-based grid system
+		InitializeShaderGrid();
 	}
 	
 	public void GenerateWorld()
 	{
+		GenerateWorld(GenerateRandomSeed());
+	}
+	
+	public void GenerateWorld(int seed)
+	{
+		worldSeed = seed;
+		rng = new RandomNumberGenerator();
+		rng.Seed = (ulong)seed;
+		
 		ClearWorld();
-		CreateWorldBounds();
-		CreateGrid();
 		GenerateAsteroids();
+	}
+	
+	private int GenerateRandomSeed()
+	{
+		return (int)(Time.GetUnixTimeFromSystem() % int.MaxValue);
 	}
 	
 	private void ClearWorld()
@@ -45,99 +67,37 @@ public partial class WorldGenerator : Node3D
 			asteroid?.QueueFree();
 		}
 		asteroids.Clear();
-		
-		// Clear world bounds
-		worldBoundsMesh?.QueueFree();
-		gridMesh?.QueueFree();
 	}
 	
-	private void CreateWorldBounds()
+	private void InitializeShaderGrid()
 	{
-		worldBoundsMesh = new MeshInstance3D();
-		AddChild(worldBoundsMesh);
+		// Create a large cube mesh that covers the world boundaries
+		boundaryGridMesh = new MeshInstance3D();
+		AddChild(boundaryGridMesh);
 		
-		var material = new StandardMaterial3D
-		{
-			VertexColorUseAsAlbedo = true,
-			ShadingMode = BaseMaterial3D.ShadingModeEnum.Unshaded,
-			AlbedoColor = new Color(0, 1, 0, 0.5f)
-		};
+		// Create box mesh covering the world boundaries
+		var boxMesh = new BoxMesh();
+		boxMesh.Size = new Vector3(worldSize, worldSize, worldSize);
+		boundaryGridMesh.Mesh = boxMesh;
 		
-		if (worldType == WorldType.Cube)
-		{
-			var box = new BoxMesh
-			{
-				Size = Vector3.One * worldSize
-			};
-			worldBoundsMesh.Mesh = box;
-		}
-		else // Sphere
-		{
-			var sphere = new SphereMesh
-			{
-				RadialSegments = 32,
-				Rings = 16,
-				Radius = worldSize / 2.0f,
-				Height = worldSize
-			};
-			worldBoundsMesh.Mesh = sphere;
-		}
+		// Load the boundary grid shader
+		var shader = GD.Load<Shader>("res://shaders/boundary_grid.gdshader");
+		gridShaderMaterial = new ShaderMaterial();
+		gridShaderMaterial.Shader = shader;
 		
-		worldBoundsMesh.MaterialOverride = material;
-		worldBoundsMesh.Visible = showWorldBounds;
+		// Set shader parameters for wormhole effect
+		gridShaderMaterial.SetShaderParameter("world_size", worldSize);
+		gridShaderMaterial.SetShaderParameter("proximity_distance", proximityDistance);
+		gridShaderMaterial.SetShaderParameter("distortion_strength", 1.0f);
+		gridShaderMaterial.SetShaderParameter("wormhole_speed", 0.5f);
+		gridShaderMaterial.SetShaderParameter("spiral_intensity", 3.0f);
+		
+		// Depth testing and transparency are handled in the shader
+		
+		boundaryGridMesh.MaterialOverride = gridShaderMaterial;
+		boundaryGridMesh.Visible = showGrid;
 	}
-	
-	private void CreateGrid()
-	{
-		gridMesh = new MeshInstance3D();
-		AddChild(gridMesh);
 		
-		// Create a simple grid using ArrayMesh
-		var arrays = new Godot.Collections.Array();
-		arrays.Resize((int)Mesh.ArrayType.Max);
-		
-		var vertices = new List<Vector3>();
-		var colors = new List<Color>();
-		
-		int gridLines = 20;
-		float spacing = worldSize / gridLines;
-		float halfSize = worldSize / 2.0f;
-		
-		// Create grid lines along X
-		for (int i = 0; i <= gridLines; i++)
-		{
-			float pos = -halfSize + i * spacing;
-			vertices.Add(new Vector3(pos, 0, -halfSize));
-			vertices.Add(new Vector3(pos, 0, halfSize));
-			colors.Add(new Color(0, 0.4f, 0, 0.5f));
-			colors.Add(new Color(0, 0.4f, 0, 0.5f));
-		}
-		
-		// Create grid lines along Z
-		for (int i = 0; i <= gridLines; i++)
-		{
-			float pos = -halfSize + i * spacing;
-			vertices.Add(new Vector3(-halfSize, 0, pos));
-			vertices.Add(new Vector3(halfSize, 0, pos));
-			colors.Add(new Color(0, 0.4f, 0, 0.5f));
-			colors.Add(new Color(0, 0.4f, 0, 0.5f));
-		}
-		
-		arrays[(int)Mesh.ArrayType.Vertex] = vertices.ToArray();
-		arrays[(int)Mesh.ArrayType.Color] = colors.ToArray();
-		
-		var arrayMesh = new ArrayMesh();
-		arrayMesh.AddSurfaceFromArrays(Mesh.PrimitiveType.Lines, arrays);
-		
-		gridMesh.Mesh = arrayMesh;
-		gridMesh.MaterialOverride = new StandardMaterial3D
-		{
-			VertexColorUseAsAlbedo = true,
-			ShadingMode = BaseMaterial3D.ShadingModeEnum.Unshaded
-		};
-		gridMesh.Visible = showGrid;
-	}
-	
 	private void GenerateAsteroids()
 	{
 		if (asteroidScene == null)
@@ -146,7 +106,7 @@ public partial class WorldGenerator : Node3D
 			return;
 		}
 		
-		float bound = worldSize / 2.0f * 0.8f; // Keep asteroids away from edges initially
+		float bound = worldSize / 2.0f * ASTEROID_BOUND_FACTOR; // Keep asteroids away from edges initially
 		
 		for (int i = 0; i < asteroidCount; i++)
 		{
@@ -155,13 +115,13 @@ public partial class WorldGenerator : Node3D
 			
 			// Random position
 			asteroid.Position = new Vector3(
-				GD.Randf() * bound * 2 - bound,
-				GD.Randf() * bound * 2 - bound,
-				GD.Randf() * bound * 2 - bound
+				rng.Randf() * bound * 2 - bound,
+				rng.Randf() * bound * 2 - bound,
+				rng.Randf() * bound * 2 - bound
 			);
 			
 			// Random size
-			float size = GD.Randf() * 2.0f + 1.0f;
+			float size = rng.Randf() * 2.0f + 1.0f;
 			asteroid.Scale = Vector3.One * size;
 			
 			// Initialize with world reference
@@ -170,33 +130,7 @@ public partial class WorldGenerator : Node3D
 		}
 	}
 	
-	public void SetShowBounds(bool show)
-	{
-		showWorldBounds = show;
-		if (worldBoundsMesh != null)
-			worldBoundsMesh.Visible = show;
-	}
-	
-	public void SetShowGrid(bool show)
-	{
-		showGrid = show;
-		if (gridMesh != null)
-			gridMesh.Visible = show;
-	}
-	
 	public void WrapPosition(ref Vector3 position)
-	{
-		if (worldType == WorldType.Cube)
-		{
-			WrapCube(ref position);
-		}
-		else
-		{
-			WrapSphere(ref position);
-		}
-	}
-	
-	private void WrapCube(ref Vector3 position)
 	{
 		float half = worldSize / 2.0f;
 		
@@ -209,16 +143,59 @@ public partial class WorldGenerator : Node3D
 		if (position.Z > half) position.Z = -half;
 		else if (position.Z < -half) position.Z = half;
 	}
-	
-	private void WrapSphere(ref Vector3 position)
+
+	public override void _Process(double delta)
 	{
-		float radius = worldSize / 2.0f;
-		float distance = position.Length();
-		
-		if (distance > radius)
-		{
-			// Wrap to opposite side
-			position = position.Normalized() * (-radius * 0.95f);
-		}
+		// Update shader-based grid visualization
+		UpdateShaderGrid();
 	}
+
+	private void UpdateShaderGrid()
+	{
+		if (!showGrid || gridShaderMaterial == null) return;
+
+		var networkManager = NetworkManager.Instance;
+		if (networkManager == null) return;
+
+		var playerShips = networkManager.GetPlayerShips();
+		if (playerShips == null) return;
+
+		// Only show grid for the local player
+		var localPlayerId = networkManager.GetLocalPlayerId();
+		if (localPlayerId == -1 || !playerShips.ContainsKey(localPlayerId))
+		{
+			boundaryGridMesh.Visible = false;
+			return;
+		}
+
+		var localShip = playerShips[localPlayerId];
+		if (localShip == null)
+		{
+			boundaryGridMesh.Visible = false;
+			return;
+		}
+
+		// Update player position in shader
+		var playerPos = localShip.GlobalPosition;
+		gridShaderMaterial.SetShaderParameter("player_position", playerPos);
+		
+		// Show grid only when player is near boundaries
+		bool isNearBound = IsPlayerNearBounds(playerPos);
+		boundaryGridMesh.Visible = isNearBound;
+	}
+
+	private bool IsPlayerNearBounds(Vector3 position)
+	{
+		float half = worldSize / 2.0f;
+		float threshold = proximityDistance;
+
+		// Check distance to any face of the cube
+		float distanceToNearestFace = Mathf.Min(
+			Mathf.Min(half - Mathf.Abs(position.X), half - Mathf.Abs(position.Y)),
+			half - Mathf.Abs(position.Z)
+		);
+
+		return distanceToNearestFace <= threshold;
+	}
+
 }

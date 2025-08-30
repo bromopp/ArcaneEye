@@ -17,10 +17,7 @@ radial_segments = 7
 rings = 5
 
 [node name="ControllableBullet" type="Area3D"]
-collision_layer = 2
-collision_mask = 2
 script = ExtResource("1_mdeqr")
-lifetime = 2.0
 explosionScene = ExtResource("2_6kh4y")
 
 [node name="CollisionShape3D" type="CollisionShape3D" parent="."]

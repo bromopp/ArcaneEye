@@ -7,6 +7,7 @@
 [sub_resource type="SphereShape3D" id="SphereShape3D_akfqu"]
 
 [node name="Asteroid" type="RigidBody3D"]
+collision_layer = 4
 script = ExtResource("1_akfqu")
 
 [node name="MeshInstance3D" type="MeshInstance3D" parent="."]

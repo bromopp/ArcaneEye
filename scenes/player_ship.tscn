@@ -2,25 +2,23 @@
 
 [ext_resource type="Script" uid="uid://ca4dwfds3roic" path="res://scripts/PlayerShip.cs" id="1_wbtlb"]
 [ext_resource type="PackedScene" uid="uid://40cb5yb4xl3s" path="res://scenes/ControllableBullet.tscn" id="2_ye4q7"]
-
-[sub_resource type="PrismMesh" id="PrismMesh_ye4q7"]
-
-[sub_resource type="ConvexPolygonShape3D" id="ConvexPolygonShape3D_wbtlb"]
-points = PackedVector3Array(0, 0.5, 0.5, 0.5, -0.5, 0.5, 0, 0.5, -0.5, -0.5, -0.5, 0.5, 0.5, -0.5, -0.5, -0.5, -0.5, -0.5)
+[ext_resource type="ArrayMesh" uid="uid://c783ij2rp0vkf" path="res://assets/m1-ship1.obj" id="4_7ni5w"]
+[ext_resource type="PackedScene" uid="uid://jen701bj8a20" path="res://scenes/death.tscn" id="4_ys4te"]
 
 [node name="PlayerShip" type="RigidBody3D"]
-collision_layer = 3
-collision_mask = 3
 script = ExtResource("1_wbtlb")
 bulletScene = ExtResource("2_ye4q7")
+deathScene = ExtResource("4_ys4te")
 
 [node name="MeshInstance3D" type="MeshInstance3D" parent="."]
-mesh = SubResource("PrismMesh_ye4q7")
+transform = Transform3D(-0.15, 0, -1.31134e-08, 0, 0.15, 0, 1.31134e-08, 0, -0.15, 0, 0, 0)
+mesh = ExtResource("4_7ni5w")
 
 [node name="CollisionShape3D" type="CollisionShape3D" parent="."]
-shape = SubResource("ConvexPolygonShape3D_wbtlb")
 
 [node name="CameraRig" type="Node3D" parent="."]
 transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 0.00509691, -0.0194597, 0.00932932)
 
 [node name="Camera3D" type="Camera3D" parent="CameraRig"]
+transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 0, 1.215, 3.565)
+current = true

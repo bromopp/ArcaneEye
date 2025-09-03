@@ -131,6 +131,14 @@ public partial class NetworkManager : Node
     // Server functions
     public void StartServer()
     {
+        // Ensure we have a clean peer before starting server
+        if (peer.GetConnectionStatus() != MultiplayerPeer.ConnectionStatus.Disconnected)
+        {
+            GD.Print("Cleaning up existing peer before starting server");
+            peer.Close();
+            peer = new ENetMultiplayerPeer();
+        }
+        
         var error = peer.CreateServer(PORT, MAX_PLAYERS);
         if (error != Error.Ok)
         {
@@ -157,6 +165,14 @@ public partial class NetworkManager : Node
     // Client functions
     public void StartClient()
     {
+        // Ensure we have a clean peer before connecting as client
+        if (peer.GetConnectionStatus() != MultiplayerPeer.ConnectionStatus.Disconnected)
+        {
+            GD.Print("Cleaning up existing peer before connecting as client");
+            peer.Close();
+            peer = new ENetMultiplayerPeer();
+        }
+        
         var address = uiManager?.GetIPAddress() ?? IP_ADDRESS;
         var error = peer.CreateClient(address, PORT);
 
@@ -215,6 +231,13 @@ public partial class NetworkManager : Node
     {
         GD.PrintErr("Connection failed!");
         uiManager?.UpdateConnectionStatus("Connection failed!");
+        
+        // Reset multiplayer peer safely to prevent "AlreadyInUse" error
+        if (Multiplayer != null)
+        {
+            Multiplayer.MultiplayerPeer = null;
+        }
+        peer = new ENetMultiplayerPeer();
     }
 
     private void OnServerDisconnected()
@@ -222,7 +245,14 @@ public partial class NetworkManager : Node
         GD.Print("Server disconnected!");
         uiManager?.UpdateConnectionStatus("Server disconnected!");
         EmitSignal(SignalName.ServerDisconnected);
-
+        
+        // Reset multiplayer peer safely
+        if (Multiplayer != null)
+        {
+            Multiplayer.MultiplayerPeer = null;
+        }
+        peer = new ENetMultiplayerPeer();
+        
         // Clean up
         CleanupGame();
     }
@@ -348,17 +378,19 @@ public partial class NetworkManager : Node
 
     private void UpdatePlayerList()
     {
-        uiManager?.UpdatePlayerList(players, Multiplayer.GetUniqueId());
+        var localId = GetLocalPlayerId();
+        uiManager?.UpdatePlayerList(players, localId);
     }
 
     // Public utility methods
     public bool IsServer()
     {
-        return Multiplayer.IsServer();
+        return Multiplayer?.MultiplayerPeer != null && Multiplayer.IsServer();
     }
 
     public int GetLocalPlayerId()
     {
+        if (Multiplayer?.MultiplayerPeer == null) return -1;
         return Multiplayer.GetUniqueId();
     }
 
@@ -369,7 +401,21 @@ public partial class NetworkManager : Node
 
     public void Disconnect()
     {
-        peer.Close();
+        // Check if multiplayer is active before attempting operations
+        if (Multiplayer != null && Multiplayer.MultiplayerPeer != null && Multiplayer.MultiplayerPeer.GetConnectionStatus() != MultiplayerPeer.ConnectionStatus.Disconnected)
+        {
+            peer?.Close();
+        }
+        
+        // Reset multiplayer peer to null to prevent further operations
+        if (Multiplayer != null)
+        {
+            Multiplayer.MultiplayerPeer = null;
+        }
+        
+        // Create new peer instance for future connections
+        peer = new ENetMultiplayerPeer();
+        
         CleanupGame();
     }
 

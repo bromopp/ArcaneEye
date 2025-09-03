@@ -28,19 +28,114 @@ public partial class ControllableBullet : Area3D
     private Vector2 mouseRotation = Vector2.Zero;
     private bool isControlled = false;
     private WorldGenerator world;
+    private bool wasConnected = true; // Track previous connection state
+    
+    // Helper method to safely check multiplayer authority
+    private bool SafeIsMultiplayerAuthority()
+    {
+        try
+        {
+            return IsMultiplayerAuthority();
+        }
+        catch (System.Exception)
+        {
+            // Connection lost or multiplayer not available
+            return false;
+        }
+    }
+    
+    // Check connection status and clean up if disconnected
+    private bool CheckConnectionAndCleanup()
+    {
+        if (Multiplayer?.MultiplayerPeer == null)
+        {
+            // No multiplayer peer - clean up
+            GD.Print($"[{Name}] No multiplayer peer found, cleaning up bullet");
+            CleanupAndDestroy();
+            return false;
+        }
+        
+        var connectionStatus = MultiplayerPeer.ConnectionStatus.Disconnected;
+        try
+        {
+            connectionStatus = Multiplayer.MultiplayerPeer.GetConnectionStatus();
+        }
+        catch (System.Exception ex)
+        {
+            GD.PrintErr($"[{Name}] Failed to get connection status: {ex.Message}");
+            CleanupAndDestroy();
+            return false;
+        }
+        
+        bool isConnected = connectionStatus == MultiplayerPeer.ConnectionStatus.Connected;
+        
+        // If we were connected but now we're not, clean up
+        if (wasConnected && !isConnected)
+        {
+            GD.Print($"[{Name}] Connection lost (was connected: {wasConnected}, now: {isConnected}), cleaning up bullet");
+            CleanupAndDestroy();
+            return false;
+        }
+        
+        // Update connection state
+        wasConnected = isConnected;
+        return true;
+    }
+    
+    // Clean up and destroy the bullet safely
+    private void CleanupAndDestroy()
+    {
+        // Release control first
+        if (isControlled)
+        {
+            ReleaseControl();
+        }
+        
+        // Clean up without explosion (connection lost scenario)
+        QueueFree();
+    }
+    
+    // Handle peer disconnection
+    private void OnPeerDisconnected(long id)
+    {
+        // If the owner disconnected, clean up the bullet
+        if (id == ownerId)
+        {
+            GD.Print($"[{Name}] Owner {ownerId} disconnected, cleaning up bullet");
+            CleanupAndDestroy();
+        }
+    }
+    
+    // Handle server disconnection
+    private void OnServerDisconnected()
+    {
+        GD.Print($"[{Name}] Server disconnected, cleaning up bullet");
+        CleanupAndDestroy();
+    }
+    
     public override void _Ready()
     {
-
-        // Create visual
-        world = GetNode<WorldGenerator>("/root/Main/WorldGenerator");
+        // Create visual - safely get WorldGenerator
+        var worldNode = GetNodeOrNull<WorldGenerator>("/root/Main/WorldGenerator");
+        if (IsInstanceValid(worldNode))
+        {
+            world = worldNode;
+        }
 
         // Set up camera
-        if (IsMultiplayerAuthority())
+        if (SafeIsMultiplayerAuthority() && Multiplayer?.MultiplayerPeer != null)
         {
             SetupCamera();
         }
         // Connect signals
         BodyEntered += OnBodyEntered;
+        
+        // Monitor multiplayer disconnections
+        if (Multiplayer != null)
+        {
+            Multiplayer.PeerDisconnected += OnPeerDisconnected;
+            Multiplayer.ServerDisconnected += OnServerDisconnected;
+        }
 
         // Enable monitoring
         Monitoring = true;
@@ -98,7 +193,7 @@ public partial class ControllableBullet : Area3D
         mouseRotation = new Vector2(shipRotation.Y, shipRotation.X);
 
         // Only the owner who has authority takes control
-        if (IsMultiplayerAuthority() && ownerId == Multiplayer.GetUniqueId())
+        if (SafeIsMultiplayerAuthority() && Multiplayer?.MultiplayerPeer != null && ownerId == Multiplayer.GetUniqueId())
         {
             TakeControl();
         }
@@ -106,7 +201,7 @@ public partial class ControllableBullet : Area3D
 
     private void TakeControl()
     {
-        if (!IsMultiplayerAuthority()) return;
+        if (!SafeIsMultiplayerAuthority()) return;
 
         isControlled = true;
 
@@ -123,14 +218,14 @@ public partial class ControllableBullet : Area3D
         }
 
         // Disable ship camera only for the local player
-        if (ownerShip != null && ownerShip.IsMultiplayerAuthority())
+        if (IsInstanceValid(ownerShip) && ownerShip.IsMultiplayerAuthority())
         {
             ownerShip.DisableCamera();
             ownerShip.SetCrosshairVisible(false);
         }
 
         // Show bullet crosshair
-        if (ownerShip != null)
+        if (IsInstanceValid(ownerShip))
         {
             ownerShip.ShowBulletCrosshair(true);
         }
@@ -141,7 +236,7 @@ public partial class ControllableBullet : Area3D
 
     public void ReleaseControl()
     {
-        if (!IsMultiplayerAuthority()) return;
+        if (!SafeIsMultiplayerAuthority()) return;
 
         isControlled = false;
 
@@ -152,7 +247,7 @@ public partial class ControllableBullet : Area3D
         }
 
         // Re-enable ship camera only for the local player
-        if (ownerShip != null && ownerShip.IsMultiplayerAuthority())
+        if (IsInstanceValid(ownerShip) && ownerShip.IsMultiplayerAuthority())
         {
             ownerShip.EnableCamera();
             ownerShip.SetCrosshairVisible(true); // Show ship crosshair
@@ -162,7 +257,7 @@ public partial class ControllableBullet : Area3D
 
     public override void _Input(InputEvent @event)
     {
-        if (!isControlled || !IsMultiplayerAuthority()) return;
+        if (!isControlled || !SafeIsMultiplayerAuthority()) return;
 
         if (@event is InputEventMouseMotion mouseMotion)
         {
@@ -178,61 +273,83 @@ public partial class ControllableBullet : Area3D
 
     public override void _PhysicsProcess(double delta)
     {
-        // Linear speed ramp-up over rampUpTime seconds
-        if (aliveTime < rampUpTime)
+        // Check for connection loss and clean up if disconnected
+        if (!CheckConnectionAndCleanup())
         {
-            // Linear interpolation: speed increases from 0 to max over rampUpTime
-            currentSpeed = (aliveTime / rampUpTime) * speed;
+            return; // Bullet will be destroyed, exit early
         }
-        else
+        
+        if (Multiplayer?.MultiplayerPeer != null)
         {
-            currentSpeed = speed; // Reached max speed
+            // Linear speed ramp-up over rampUpTime seconds
+            if (aliveTime < rampUpTime)
+            {
+                // Linear interpolation: speed increases from 0 to max over rampUpTime
+                currentSpeed = (aliveTime / rampUpTime) * speed;
+            }
+            else
+            {
+                currentSpeed = speed; // Reached max speed
+            }
+
+            if (SafeIsMultiplayerAuthority() && isControlled)
+            {
+                // Apply mouse rotation
+                Rotation = new Vector3(mouseRotation.Y, mouseRotation.X, 0);
+
+                // Update direction based on current rotation
+                direction = -Transform.Basis.Z.Normalized();
+
+                // Calculate velocity: direction * current speed
+                velocity = direction * currentSpeed;
+
+                // Send state to other players - check connection status
+                if (Multiplayer?.MultiplayerPeer != null && 
+                    Multiplayer.MultiplayerPeer.GetConnectionStatus() == MultiplayerPeer.ConnectionStatus.Connected)
+                {
+                    try
+                    {
+                        Rpc(MethodName.UpdateBulletState, GlobalPosition, GlobalRotation, velocity);
+                    }
+                    catch (System.Exception ex)
+                    {
+                        GD.PrintErr($"Failed to send RPC: {ex.Message}");
+                        // Continue execution - don't let RPC failures crash the bullet
+                    }
+                }
+            }
+            else if (!isControlled)
+            {
+                // For non-controlled bullets, just use the direction * current speed
+                velocity = direction * currentSpeed;
+            }
+
+            // Move bullet
+            Position += velocity * (float)delta;
+
+            // Update camera to follow bullet smoothly
+            if (cameraRig != null && isControlled && SafeIsMultiplayerAuthority() && Multiplayer?.MultiplayerPeer != null)
+            {
+                cameraRig.GlobalPosition = GlobalPosition;
+                cameraRig.GlobalRotation = GlobalRotation;
+            }
+
+            // Check lifetime
+            aliveTime += (float)delta;
+            if (aliveTime >= lifetime)
+            {
+                Explode();
+            }
+
+            // World wrapping
+            if (IsInstanceValid(world))
+            {
+                var pos = Position;
+                world.WrapPosition(ref pos);
+                Position = pos;
+            }
         }
 
-        if (IsMultiplayerAuthority() && isControlled)
-        {
-            // Apply mouse rotation
-            Rotation = new Vector3(mouseRotation.Y, mouseRotation.X, 0);
-
-            // Update direction based on current rotation
-            direction = -Transform.Basis.Z.Normalized();
-            
-            // Calculate velocity: direction * current speed
-            velocity = direction * currentSpeed;
-            
-            // Send state to other players
-            Rpc(MethodName.UpdateBulletState, GlobalPosition, GlobalRotation, velocity);
-        }
-        else if (!isControlled)
-        {
-            // For non-controlled bullets, just use the direction * current speed
-            velocity = direction * currentSpeed;
-        }
-
-        // Move bullet
-        Position += velocity * (float)delta;
-
-        // Update camera to follow bullet smoothly
-        if (cameraRig != null && isControlled && IsMultiplayerAuthority())
-        {
-            cameraRig.GlobalPosition = GlobalPosition;
-            cameraRig.GlobalRotation = GlobalRotation;
-        }
-
-        // Check lifetime
-        aliveTime += (float)delta;
-        if (aliveTime >= lifetime)
-        {
-            Explode();
-        }
-
-        // World wrapping
-        if (world != null)
-        {
-            var pos = Position;
-            world.WrapPosition(ref pos);
-            Position = pos;
-        }
     }
 
     [Rpc(MultiplayerApi.RpcMode.AnyPeer, CallLocal = false, TransferMode = MultiplayerPeer.TransferModeEnum.UnreliableOrdered)]
@@ -241,7 +358,7 @@ public partial class ControllableBullet : Area3D
         GlobalPosition = GlobalPosition.Lerp(position, 0.2f);
         GlobalRotation = rotation;
         velocity = vel;
-        
+
         // Update direction for non-authoritative clients
         if (vel.Length() > 0.01f)
         {
@@ -253,8 +370,8 @@ public partial class ControllableBullet : Area3D
     {
         GD.Print($"{body} entered bullet");
 
-        // Don't hit the owner
-        if (body == ownerShip) return;
+        // Don't hit the owner - check if owner still exists
+        if (IsInstanceValid(ownerShip) && body == ownerShip) return;
 
         if (body is Asteroid asteroid)
         {
@@ -274,25 +391,41 @@ public partial class ControllableBullet : Area3D
         ReleaseControl();
 
         // Create explosion at bullet position
-        if (explosionScene != null)
+        if (explosionScene != null && IsInsideTree())
         {
-            var explosion = explosionScene.Instantiate<Explosion>();
-            var bulletPosition = GlobalPosition; // Store position before QueueFree
+            try
+            {
+                var explosion = explosionScene.Instantiate<Explosion>();
+                var bulletPosition = GlobalPosition; // Store position before QueueFree
 
-            // Add to scene tree first
-            GetTree().Root.AddChild(explosion);
+                // Add to scene tree first
+                GetTree().Root.AddChild(explosion);
 
-            // Set position after it's in the tree
-            explosion.GlobalPosition = bulletPosition;
+                // Set position after it's in the tree
+                explosion.GlobalPosition = bulletPosition;
 
-            // Trigger explosion effect
-            _ = explosion.Explode();
+                // Trigger explosion effect
+                _ = explosion.Explode();
+            }
+            catch (System.Exception ex)
+            {
+                GD.PrintErr($"Failed to create explosion: {ex.Message}");
+                // Continue with cleanup even if explosion fails
+            }
         }
 
         // Notify owner ship that bullet is destroyed
-        if (ownerShip != null)
+        if (IsInstanceValid(ownerShip))
         {
-            ownerShip.OnBulletDestroyed();
+            try
+            {
+                ownerShip.OnBulletDestroyed();
+            }
+            catch (System.Exception ex)
+            {
+                GD.PrintErr($"Failed to notify owner ship of bullet destruction: {ex.Message}");
+                // Continue with cleanup even if notification fails
+            }
         }
 
         QueueFree();
@@ -312,6 +445,20 @@ public partial class ControllableBullet : Area3D
 
     public override void _ExitTree()
     {
+        // Disconnect multiplayer signals to prevent memory leaks
+        if (Multiplayer != null)
+        {
+            try
+            {
+                Multiplayer.PeerDisconnected -= OnPeerDisconnected;
+                Multiplayer.ServerDisconnected -= OnServerDisconnected;
+            }
+            catch (System.Exception)
+            {
+                // Ignore errors during cleanup
+            }
+        }
+        
         // Ensure control is released when bullet is freed
         ReleaseControl();
         base._ExitTree();

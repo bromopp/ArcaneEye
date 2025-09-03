@@ -326,7 +326,9 @@ public partial class PlayerShip : RigidBody3D
 
     public override void _PhysicsProcess(double delta)
     {
-        // Update immunity timer
+        if (Multiplayer?.MultiplayerPeer != null)
+        {
+                    // Update immunity timer
         if (isImmune)
         {
             immunityTimer -= (float)delta;
@@ -335,9 +337,8 @@ public partial class PlayerShip : RigidBody3D
                 EndImmunity();
             }
         }
-
         // Only process input if we have authority and we're alive
-        if (IsMultiplayerAuthority() && isAlive)
+        if (IsMultiplayerAuthority() &&  isAlive)
         {
             HandleInput();
 
@@ -408,6 +409,8 @@ public partial class PlayerShip : RigidBody3D
             world.WrapPosition(ref pos);
             Position = pos;
         }
+        }
+
     }
 
     private void UpdateCamera(float delta)

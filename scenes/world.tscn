@@ -1,10 +1,11 @@
-[gd_scene load_steps=17 format=3 uid="uid://d2y7xe2w3wdwr"]
+[gd_scene load_steps=18 format=3 uid="uid://d2y7xe2w3wdwr"]
 
 [ext_resource type="Shader" uid="uid://b3emxdrsb44o8" path="res://textures/skyBox.gdshader" id="1_rwgxs"]
 [ext_resource type="Script" uid="uid://bnpkmw2jkxxpl" path="res://scripts/WorldGenerator.cs" id="2_4wyf3"]
 [ext_resource type="PackedScene" uid="uid://b143nglsviyq6" path="res://scenes/ui.tscn" id="3_4wyf3"]
 [ext_resource type="PackedScene" uid="uid://cypc4hwce6lr4" path="res://scenes/asteroid.tscn" id="3_k0juu"]
 [ext_resource type="Script" uid="uid://bepgotx2k54ue" path="res://scripts/NetworkManager.cs" id="6_qfnet"]
+[ext_resource type="PackedScene" uid="uid://bpq6g6vw7poi8" path="res://scenes/ingameoptions.tscn" id="6_w7kh3"]
 [ext_resource type="PackedScene" uid="uid://umttfuxbwwsj" path="res://scenes/player_ship.tscn" id="7_i7141"]
 [ext_resource type="FontFile" uid="uid://ctqle61skp841" path="res://assets/LUCON.TTF" id="8_4mrxx"]
 [ext_resource type="Script" uid="uid://c2ywqvt136gg6" path="res://scripts/GameOver.cs" id="8_7r4gi"]
@@ -83,6 +84,9 @@ ipAddressInput = NodePath("MainMenu/CenterContainer/VBoxContainer/JoinSection/IP
 connectionStatus = NodePath("MainMenu/CenterContainer/VBoxContainer/ConnectionStatus")
 playerList = NodePath("GameUI/Panel/VBoxContainer/PlayerList")
 bulletVelocityLabel = NodePath("GameUI/ScorePanel/VBoxContainer/BulletVelocityLabel")
+
+[node name="InGameOptions" parent="UI" instance=ExtResource("6_w7kh3")]
+visible = false
 
 [node name="MainMenu" type="Control" parent="UI"]
 layout_mode = 3

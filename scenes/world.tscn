@@ -1,4 +1,4 @@
-[gd_scene load_steps=23 format=3 uid="uid://d2y7xe2w3wdwr"]
+[gd_scene load_steps=24 format=3 uid="uid://d2y7xe2w3wdwr"]
 
 [ext_resource type="Shader" uid="uid://b3emxdrsb44o8" path="res://textures/skyBox.gdshader" id="1_rwgxs"]
 [ext_resource type="Script" uid="uid://bnpkmw2jkxxpl" path="res://scripts/WorldGenerator.cs" id="2_4wyf3"]
@@ -12,6 +12,7 @@
 [ext_resource type="Script" uid="uid://c2ywqvt136gg6" path="res://scripts/GameOver.cs" id="8_7r4gi"]
 [ext_resource type="Theme" uid="uid://t5qifndbt0ks" path="res://assets/customTheme.tres" id="8_q5onr"]
 [ext_resource type="Script" uid="uid://bl035hd2vvq8a" path="res://scripts/UIManager.cs" id="8_w7kh3"]
+[ext_resource type="Script" uid="uid://cybh0exj8s4bw" path="res://scripts/AsteroidPerformanceMonitor.cs" id="13_jhx03"]
 
 [sub_resource type="ShaderMaterial" id="ShaderMaterial_71j4m"]
 shader = ExtResource("1_rwgxs")
@@ -372,6 +373,9 @@ mesh = SubResource("SphereMesh_4mrxx")
 
 [node name="Music" type="AudioStreamPlayer" parent="."]
 bus = &"Music"
+
+[node name="AsteroidPerformanceMonitor" type="Node" parent="."]
+script = ExtResource("13_jhx03")
 
 [connection signal="pressed" from="UI/GameOver/BackMenuButton" to="UI/GameOver" method="BackMenu"]
 

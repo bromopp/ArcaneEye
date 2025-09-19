@@ -7,6 +7,7 @@ public partial class WorldGenerator : Node3D
 	private const int PLAYER_GRID_LINES = 8;
 	private const float PLAYER_GRID_PULSE_SPEED = 3.0f;
 	private const float ASTEROID_BOUND_FACTOR = 0.8f;
+	private const float ASTEROID_WORLD_MARGIN = 5.0f; // Distance from world bounds
 	
 	[Export] private float worldSize = 100.0f;
 	[Export] private int asteroidCount = 4;
@@ -17,8 +18,8 @@ public partial class WorldGenerator : Node3D
 	[Export] private float gridRadius = 10.0f;
 	
 	// Asteroid generation parameters
-	[Export] private float asteroidMinSeparation = 25.0f; // Minimum distance between asteroids
-	[Export] private float shipSizeReference = 1.0f; // Reference ship size for asteroid scaling
+	[Export] private float asteroidMinSeparation = 8.0f; // Minimum distance between asteroids
+	[Export] private float shipSizeReference = 1.5f; // Reference ship size for asteroid scaling
 	
 	private int worldSeed;
 	private RandomNumberGenerator rng;
@@ -119,8 +120,13 @@ public partial class WorldGenerator : Node3D
 			return;
 		}
 		
-		float bound = worldSize / 2.0f * ASTEROID_BOUND_FACTOR;
-		var positions = GenerateAsteroidPositions(bound);
+		// Calculate asteroid spawn bounds with margin from world edges
+		float halfWorldSize = worldSize / 2.0f;
+		float asteroidBound = (halfWorldSize - ASTEROID_WORLD_MARGIN) * ASTEROID_BOUND_FACTOR;
+		
+		GD.Print($"Asteroid spawn area: {asteroidBound * 2}x{asteroidBound * 2}x{asteroidBound * 2} (margin: {ASTEROID_WORLD_MARGIN})");
+		
+		var positions = GenerateAsteroidPositions(asteroidBound);
 		
 		for (int i = 0; i < positions.Count; i++)
 		{
@@ -133,7 +139,7 @@ public partial class WorldGenerator : Node3D
 			// Set position
 			asteroid.Position = positions[i];
 			
-			// Calculate size multiplier (2x to 4x ship size)
+			// Calculate size multiplier (2x to 4x ship size, then 20% smaller)
 			var tempRng = new RandomNumberGenerator();
 			tempRng.Seed = (ulong)asteroidSeed;
 			float sizeMultiplier = 2.0f + tempRng.Randf() * 2.0f; // 2x to 4x
@@ -153,7 +159,7 @@ public partial class WorldGenerator : Node3D
 			asteroids.Add(asteroid);
 		}
 		
-		GD.Print($"Generated {asteroids.Count} procedural asteroids");
+		GD.Print($"Generated {asteroids.Count} procedural asteroids within bounds");
 	}
 	
 	private List<Vector3> GenerateAsteroidPositions(float bound)

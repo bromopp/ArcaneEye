@@ -6,8 +6,8 @@ public partial class UIManager : Node
 
     // UI References
     [Export] private Control mainMenu;
-    [Export] private Control gameUI;
     [Export] private Control gameOver;
+    [Export] private Control inGameOptions;
     [Export] private RichTextLabel podiumText;
     [Export] private LineEdit playerNameInput;
     [Export] private LineEdit ipAddressInput;
@@ -20,7 +20,7 @@ public partial class UIManager : Node
     // UI Button references
     private Button hostButton;
     private Button joinButton;
-    private Button disconnectButton;
+  
 
     public override void _Ready()
     {
@@ -64,19 +64,23 @@ public partial class UIManager : Node
 	{
 		if (@event is InputEventKey keyEvent && keyEvent.Pressed)
 		{
-			if (keyEvent.Keycode == Key.Escape)
-			{
-				// Toggle mouse for menu access
-				if (Input.MouseMode == Input.MouseModeEnum.Captured)
-					Input.MouseMode = Input.MouseModeEnum.Visible;
-				else
-					Input.MouseMode = Input.MouseModeEnum.Captured;
+            if (keyEvent.Keycode == Key.Escape)
+            {
+
+                // Toggle mouse for menu access
+                if (Input.MouseMode == Input.MouseModeEnum.Captured)
+                {
+                    Input.MouseMode = Input.MouseModeEnum.Visible;
+                    ShowInGameOptions();
+                }
+                else
+                {
+                    Input.MouseMode = Input.MouseModeEnum.Captured;
+                    HideInGameOptions();
+                }
+
 			}
-			else if (keyEvent.Keycode == Key.P)
-			{
-				isPaused = !isPaused;
-				GetTree().Paused = isPaused;
-			}
+
 		}
 	}
     private void ConnectUIButtons()
@@ -84,7 +88,6 @@ public partial class UIManager : Node
         // Try to find and connect buttons
         hostButton = GetNodeOrNull<Button>("../UI/MainMenu/CenterContainer/VBoxContainer/HostSection/HostButton");
         joinButton = GetNodeOrNull<Button>("../UI/MainMenu/CenterContainer/VBoxContainer/JoinSection/JoinButton");
-        disconnectButton = GetNodeOrNull<Button>("../UI/GameUI/Panel/VBoxContainer/DisconnectButton");
 
         // Note: Button connections will be handled by NetworkManager
         // This allows for better separation while maintaining functionality
@@ -95,24 +98,40 @@ public partial class UIManager : Node
     {
         GD.Print($"main menu is: {mainMenu}");
         mainMenu?.Show();
-        gameUI?.Hide();
         gameOver?.Hide();
+        inGameOptions?.Hide();
         Input.MouseMode = Input.MouseModeEnum.Visible;
     }
 
-    public void ShowGameUI()
+    public void HideGameUI()
     {
         mainMenu?.Hide();
-        gameUI?.Show();
         gameOver?.Hide();
+        inGameOptions?.Hide();
     }
 
     public void ShowGameOver()
     {
         mainMenu?.Hide();
-        gameUI?.Hide();
         gameOver?.Show();
+        inGameOptions?.Hide();
         Input.MouseMode = Input.MouseModeEnum.Visible;
+    }
+
+    public void ShowInGameOptions()
+    {        
+        if (IsMainMenuVisible() || IsGameOverVisible())
+        {
+            return;
+        };
+
+        inGameOptions?.Show();
+        Input.MouseMode = Input.MouseModeEnum.Visible;
+    }
+
+    public void HideInGameOptions()
+    {
+        inGameOptions?.Hide();
     }
 
     // Connection Status
@@ -184,26 +203,20 @@ public partial class UIManager : Node
             joinButton.Pressed += onPressed;
     }
 
-    public void ConnectDisconnectButton(System.Action onPressed)
-    {
-        if (disconnectButton != null)
-            disconnectButton.Pressed += onPressed;
-    }
-
     // Utility Methods
     public bool IsMainMenuVisible()
     {
         return mainMenu?.Visible ?? false;
     }
 
-    public bool IsGameUIVisible()
-    {
-        return gameUI?.Visible ?? false;
-    }
-
     public bool IsGameOverVisible()
     {
         return gameOver?.Visible ?? false;
+    }
+
+    public bool IsInGameOptionsVisible()
+    {
+        return inGameOptions?.Visible ?? false;
     }
 
     // Bullet Velocity Tracking
@@ -214,7 +227,7 @@ public partial class UIManager : Node
         {
             bulletVelocityLabel = GetNodeOrNull<Label>("../GameUI/ScorePanel/VBoxContainer/BulletVelocityLabel");
         }
-        
+
         // Hide by default
         if (bulletVelocityLabel != null)
         {

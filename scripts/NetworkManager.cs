@@ -25,6 +25,8 @@ public partial class NetworkManager : Node
     // UI Manager reference
     private UIManager uiManager;
 
+    private Ingameoptions ingameoptions;
+
     [Signal]
     public delegate void PlayerConnectedEventHandler(int id, string name, Color color);
 
@@ -69,7 +71,7 @@ public partial class NetworkManager : Node
 
         // Get UI Manager reference with retry
         InitializeUIManager();
-
+        InitializeInGameOptions();
         // Connect multiplayer signals
         Multiplayer.PeerConnected += OnPeerConnected;
         Multiplayer.PeerDisconnected += OnPeerDisconnected;
@@ -114,6 +116,39 @@ public partial class NetworkManager : Node
             }
         }
     }
+        private void InitializeInGameOptions()
+    {
+        ingameoptions = Ingameoptions.Instance;
+        
+        if (ingameoptions == null)
+        {
+            GD.PrintErr("ingameoptions not found! Attempting to find ingameoptions in scene tree...");
+            
+            // Try to find ingameoptions in the scene tree as a fallback
+            var ingameoptionsNode = GetTree().GetFirstNodeInGroup("ui_manager");
+            if (ingameoptionsNode is Ingameoptions foundingameoptions)
+            {
+                ingameoptions = foundingameoptions;
+                Ingameoptions.Instance = foundingameoptions; // Update the singleton reference
+                GD.Print("Found ingameoptions in scene tree and updated singleton reference");
+            }
+            else
+            {
+                // Last resort: try to find by name
+                ingameoptionsNode = GetNode<Ingameoptions>("UI/InGameOptions");
+                if (ingameoptionsNode != null)
+                {
+                    ingameoptions = (Ingameoptions)ingameoptionsNode;
+                    Ingameoptions.Instance = (Ingameoptions)ingameoptionsNode;
+                    GD.Print("Found ingameoptions by path and updated singleton reference");
+                }
+                else
+                {
+                    GD.PrintErr("ingameoptions could not be found! UI functionality will be limited.");
+                }
+            }
+        }
+    }
 
     private void SetupUI()
     {
@@ -125,7 +160,10 @@ public partial class NetworkManager : Node
         // Connect UI buttons
         uiManager.ConnectHostButton(StartServer);
         uiManager.ConnectJoinButton(StartClient);
-        uiManager.ConnectDisconnectButton(Disconnect);
+
+        //if (ingameoptions == null) return;
+
+        ingameoptions.ConnectDisconnectButton(Disconnect);
     }
 
     // Server functions
@@ -354,7 +392,7 @@ public partial class NetworkManager : Node
     // UI Methods
     private void StartGame()
     {
-        uiManager?.ShowGameUI();
+        uiManager?.HideGameUI();
     }
 
     private void CleanupGame()
@@ -401,6 +439,7 @@ public partial class NetworkManager : Node
 
     public void Disconnect()
     {
+        GD.Print("entro al disconnect");
         // Check if multiplayer is active before attempting operations
         if (Multiplayer != null && Multiplayer.MultiplayerPeer != null && Multiplayer.MultiplayerPeer.GetConnectionStatus() != MultiplayerPeer.ConnectionStatus.Disconnected)
         {
@@ -415,7 +454,7 @@ public partial class NetworkManager : Node
         
         // Create new peer instance for future connections
         peer = new ENetMultiplayerPeer();
-        
+        uiManager?.UpdateConnectionStatus($"");
         CleanupGame();
     }
 

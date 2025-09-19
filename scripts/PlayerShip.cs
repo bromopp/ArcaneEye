@@ -550,7 +550,7 @@ public partial class PlayerShip : RigidBody3D
         // Use existing mesh if available, otherwise create fallback
         if (meshInstance.Mesh != null)
         {
-            meshInstance.MaterialOverride = material;
+            meshInstance.SetSurfaceOverrideMaterial(0, material);
         }
         else
         {

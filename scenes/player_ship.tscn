@@ -2,7 +2,7 @@
 
 [ext_resource type="Script" uid="uid://ca4dwfds3roic" path="res://scripts/PlayerShip.cs" id="1_wbtlb"]
 [ext_resource type="PackedScene" uid="uid://40cb5yb4xl3s" path="res://scenes/ControllableBullet.tscn" id="2_ye4q7"]
-[ext_resource type="ArrayMesh" uid="uid://c783ij2rp0vkf" path="res://assets/m1-ship1.obj" id="4_7ni5w"]
+[ext_resource type="ArrayMesh" uid="uid://ra6j6fpc37ok" path="res://assets/nave2.obj" id="4_7ni5w"]
 [ext_resource type="PackedScene" uid="uid://jen701bj8a20" path="res://scenes/death.tscn" id="4_ys4te"]
 
 [node name="PlayerShip" type="RigidBody3D"]
@@ -11,7 +11,7 @@ bulletScene = ExtResource("2_ye4q7")
 deathScene = ExtResource("4_ys4te")
 
 [node name="MeshInstance3D" type="MeshInstance3D" parent="."]
-transform = Transform3D(-0.15, 0, -1.31134e-08, 0, 0.15, 0, 1.31134e-08, 0, -0.15, 0, 0, 0)
+transform = Transform3D(-1, 0, -1.50996e-07, 0, 1, 0, 1.50996e-07, 0, -1, 0, 0, 0)
 mesh = ExtResource("4_7ni5w")
 
 [node name="CollisionShape3D" type="CollisionShape3D" parent="."]

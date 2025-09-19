@@ -263,7 +263,7 @@ public partial class ControllableBullet : Area3D
         {
             mouseRotation.X -= mouseMotion.Relative.X * 0.002f;
             mouseRotation.Y -= mouseMotion.Relative.Y * 0.002f;
-            mouseRotation.Y = Mathf.Clamp(mouseRotation.Y, -1.0f, 1.0f);
+            //mouseRotation.Y = Mathf.Clamp(mouseRotation.Y, -2.0f, 2.0f);
         }
         if (Input.IsActionPressed("cancel_bullet"))
         {

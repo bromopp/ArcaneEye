@@ -1,29 +1,22 @@
-[gd_scene load_steps=6 format=3 uid="uid://40cb5yb4xl3s"]
+[gd_scene load_steps=5 format=3 uid="uid://40cb5yb4xl3s"]
 
 [ext_resource type="Script" uid="uid://bgh8s44igrwq0" path="res://scripts/ControllableBullet.cs" id="1_mdeqr"]
 [ext_resource type="PackedScene" uid="uid://c8v4cu0b2f72m" path="res://scenes/explosion.tscn" id="2_6kh4y"]
+[ext_resource type="ArrayMesh" uid="uid://u5o36u4emswl" path="res://assets/misil.obj" id="3_8ngxb"]
 
 [sub_resource type="SphereShape3D" id="SphereShape3D_y25gk"]
-
-[sub_resource type="StandardMaterial3D" id="StandardMaterial3D_mkf8s"]
-albedo_color = Color(1, 0, 0, 1)
-emission_enabled = true
-emission = Color(1, 0, 0, 1)
-emission_energy_multiplier = 4.69
-
-[sub_resource type="SphereMesh" id="SphereMesh_y25gk"]
-material = SubResource("StandardMaterial3D_mkf8s")
-radial_segments = 7
-rings = 5
+radius = 0.1
 
 [node name="ControllableBullet" type="Area3D"]
 script = ExtResource("1_mdeqr")
 explosionScene = ExtResource("2_6kh4y")
 
 [node name="CollisionShape3D" type="CollisionShape3D" parent="."]
+transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 0, 0.443856, 1.10398)
 shape = SubResource("SphereShape3D_y25gk")
 
 [node name="CSGMesh3D" type="CSGMesh3D" parent="."]
-mesh = SubResource("SphereMesh_y25gk")
+transform = Transform3D(1, 0, 0, 0, -1, 8.74228e-08, 0, -8.74228e-08, -1, 0, 0.443856, 1.28222)
+mesh = ExtResource("3_8ngxb")
 
 [connection signal="body_entered" from="." to="." method="_on_body_entered"]

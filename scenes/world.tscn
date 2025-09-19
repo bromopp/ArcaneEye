@@ -1,14 +1,16 @@
-[gd_scene load_steps=18 format=3 uid="uid://d2y7xe2w3wdwr"]
+[gd_scene load_steps=23 format=3 uid="uid://d2y7xe2w3wdwr"]
 
 [ext_resource type="Shader" uid="uid://b3emxdrsb44o8" path="res://textures/skyBox.gdshader" id="1_rwgxs"]
 [ext_resource type="Script" uid="uid://bnpkmw2jkxxpl" path="res://scripts/WorldGenerator.cs" id="2_4wyf3"]
 [ext_resource type="PackedScene" uid="uid://b143nglsviyq6" path="res://scenes/ui.tscn" id="3_4wyf3"]
 [ext_resource type="PackedScene" uid="uid://cypc4hwce6lr4" path="res://scenes/asteroid.tscn" id="3_k0juu"]
+[ext_resource type="Texture2D" uid="uid://b5cqm6tukspgj" path="res://textures/uiMenus.svg" id="6_e3hyu"]
 [ext_resource type="Script" uid="uid://bepgotx2k54ue" path="res://scripts/NetworkManager.cs" id="6_qfnet"]
 [ext_resource type="PackedScene" uid="uid://bpq6g6vw7poi8" path="res://scenes/ingameoptions.tscn" id="6_w7kh3"]
 [ext_resource type="PackedScene" uid="uid://umttfuxbwwsj" path="res://scenes/player_ship.tscn" id="7_i7141"]
 [ext_resource type="FontFile" uid="uid://ctqle61skp841" path="res://assets/LUCON.TTF" id="8_4mrxx"]
 [ext_resource type="Script" uid="uid://c2ywqvt136gg6" path="res://scripts/GameOver.cs" id="8_7r4gi"]
+[ext_resource type="Theme" uid="uid://t5qifndbt0ks" path="res://assets/customTheme.tres" id="8_q5onr"]
 [ext_resource type="Script" uid="uid://bl035hd2vvq8a" path="res://scripts/UIManager.cs" id="8_w7kh3"]
 
 [sub_resource type="ShaderMaterial" id="ShaderMaterial_71j4m"]
@@ -29,6 +31,15 @@ ambient_light_source = 3
 ambient_light_color = Color(0.231373, 0.231373, 0.364706, 1)
 ambient_light_sky_contribution = 0.82
 ambient_light_energy = 6.34
+
+[sub_resource type="FontVariation" id="FontVariation_e3hyu"]
+base_font = ExtResource("8_4mrxx")
+
+[sub_resource type="Theme" id="Theme_q5onr"]
+
+[sub_resource type="StyleBoxFlat" id="StyleBoxFlat_jhx03"]
+bg_color = Color(0.6, 0.6, 0.6, 0)
+border_color = Color(0.823529, 0.678431, 0.239216, 1)
 
 [sub_resource type="StandardMaterial3D" id="StandardMaterial3D_i7141"]
 albedo_color = Color(0, 0, 0, 1)
@@ -73,20 +84,17 @@ transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 0, 0, -876.203)
 light_energy = 0.924
 light_specular = 2.166
 
-[node name="UI" type="CanvasLayer" parent="." node_paths=PackedStringArray("mainMenu", "gameUI", "gameOver", "podiumText", "playerNameInput", "ipAddressInput", "connectionStatus", "playerList", "bulletVelocityLabel")]
+[node name="UI" type="CanvasLayer" parent="." node_paths=PackedStringArray("mainMenu", "gameOver", "inGameOptions", "podiumText", "playerNameInput", "ipAddressInput", "connectionStatus", "playerList", "bulletVelocityLabel")]
 script = ExtResource("8_w7kh3")
 mainMenu = NodePath("MainMenu")
-gameUI = NodePath("GameUI")
 gameOver = NodePath("GameOver")
+inGameOptions = NodePath("InGameOptions")
 podiumText = NodePath("GameOver/podiumText")
 playerNameInput = NodePath("MainMenu/CenterContainer/VBoxContainer/VBoxContainer/LineEdit")
 ipAddressInput = NodePath("MainMenu/CenterContainer/VBoxContainer/JoinSection/IPAddressInput")
 connectionStatus = NodePath("MainMenu/CenterContainer/VBoxContainer/ConnectionStatus")
 playerList = NodePath("GameUI/Panel/VBoxContainer/PlayerList")
 bulletVelocityLabel = NodePath("GameUI/ScorePanel/VBoxContainer/BulletVelocityLabel")
-
-[node name="InGameOptions" parent="UI" instance=ExtResource("6_w7kh3")]
-visible = false
 
 [node name="MainMenu" type="Control" parent="UI"]
 layout_mode = 3
@@ -96,14 +104,15 @@ anchor_bottom = 1.0
 grow_horizontal = 2
 grow_vertical = 2
 
-[node name="ColorRect" type="ColorRect" parent="UI/MainMenu"]
+[node name="ColorRect" type="TextureRect" parent="UI/MainMenu"]
 layout_mode = 1
 anchors_preset = 15
 anchor_right = 1.0
 anchor_bottom = 1.0
 grow_horizontal = 2
 grow_vertical = 2
-color = Color(0.101961, 0.101961, 0.101961, 1)
+texture = ExtResource("6_e3hyu")
+expand_mode = 2
 
 [node name="CenterContainer" type="CenterContainer" parent="UI/MainMenu"]
 layout_mode = 1
@@ -114,12 +123,16 @@ grow_horizontal = 2
 grow_vertical = 2
 
 [node name="VBoxContainer" type="VBoxContainer" parent="UI/MainMenu/CenterContainer"]
+custom_minimum_size = Vector2(600, 0)
 layout_mode = 2
 
 [node name="Label" type="Label" parent="UI/MainMenu/CenterContainer/VBoxContainer"]
+custom_minimum_size = Vector2(70, 40)
 layout_mode = 2
+theme_override_fonts/font = SubResource("FontVariation_e3hyu")
 theme_override_font_sizes/font_size = 48
-text = "ArcaneEye Multiplayer"
+text = "ArcaneEye"
+horizontal_alignment = 1
 
 [node name="HSeparator" type="HSeparator" parent="UI/MainMenu/CenterContainer/VBoxContainer"]
 layout_mode = 2
@@ -129,12 +142,17 @@ layout_mode = 2
 
 [node name="Label" type="Label" parent="UI/MainMenu/CenterContainer/VBoxContainer/VBoxContainer"]
 layout_mode = 2
+theme_override_fonts/font = ExtResource("8_4mrxx")
 text = "Player Name:"
 
 [node name="LineEdit" type="LineEdit" parent="UI/MainMenu/CenterContainer/VBoxContainer/VBoxContainer"]
 layout_mode = 2
-text = "Annon"
-placeholder_text = "YourName"
+theme = SubResource("Theme_q5onr")
+theme_override_colors/font_color = Color(0.823529, 0.678431, 0.239216, 1)
+placeholder_text = "name"
+emoji_menu_enabled = false
+drag_and_drop_selection_enabled = false
+caret_blink = true
 
 [node name="HSeparator2" type="HSeparator" parent="UI/MainMenu/CenterContainer/VBoxContainer"]
 layout_mode = 2
@@ -144,10 +162,12 @@ layout_mode = 2
 
 [node name="Label" type="Label" parent="UI/MainMenu/CenterContainer/VBoxContainer/HostSection"]
 layout_mode = 2
+theme_override_fonts/font = ExtResource("8_4mrxx")
 text = "HOST GAME"
 
 [node name="HostButton" type="Button" parent="UI/MainMenu/CenterContainer/VBoxContainer/HostSection"]
 layout_mode = 2
+theme_override_fonts/font = ExtResource("8_4mrxx")
 text = "Start Server"
 
 [node name="HSeparator3" type="HSeparator" parent="UI/MainMenu/CenterContainer/VBoxContainer"]
@@ -158,14 +178,17 @@ layout_mode = 2
 
 [node name="Label" type="Label" parent="UI/MainMenu/CenterContainer/VBoxContainer/JoinSection"]
 layout_mode = 2
+theme_override_fonts/font = ExtResource("8_4mrxx")
 text = "JOIN GAME"
 
 [node name="IPAddressInput" type="LineEdit" parent="UI/MainMenu/CenterContainer/VBoxContainer/JoinSection"]
 layout_mode = 2
+theme_override_fonts/font = ExtResource("8_4mrxx")
 placeholder_text = "Server IP"
 
 [node name="JoinButton" type="Button" parent="UI/MainMenu/CenterContainer/VBoxContainer/JoinSection"]
 layout_mode = 2
+theme_override_fonts/font = ExtResource("8_4mrxx")
 text = "Connect"
 
 [node name="HSeparator4" type="HSeparator" parent="UI/MainMenu/CenterContainer/VBoxContainer"]
@@ -174,6 +197,97 @@ layout_mode = 2
 [node name="ConnectionStatus" type="Label" parent="UI/MainMenu/CenterContainer/VBoxContainer"]
 modulate = Color(0.725618, 0.635667, 0, 1)
 layout_mode = 2
+
+[node name="GameOver" type="Control" parent="UI" node_paths=PackedStringArray("backToMenuButton")]
+layout_mode = 3
+anchors_preset = 15
+anchor_right = 1.0
+anchor_bottom = 1.0
+grow_horizontal = 2
+grow_vertical = 2
+size_flags_horizontal = 6
+size_flags_vertical = 6
+script = ExtResource("8_7r4gi")
+backToMenuButton = NodePath("BackMenuButton")
+
+[node name="ColorRect" type="TextureRect" parent="UI/GameOver"]
+layout_mode = 1
+anchors_preset = -1
+anchor_left = -0.167
+anchor_top = -0.167
+anchor_right = 1.167
+anchor_bottom = 1.167
+offset_left = 320.64
+offset_top = 180.36
+offset_right = -320.64
+offset_bottom = -180.36
+grow_horizontal = 2
+grow_vertical = 2
+texture = ExtResource("6_e3hyu")
+
+[node name="CenterContainer" type="CenterContainer" parent="UI/GameOver"]
+layout_mode = 1
+anchors_preset = -1
+anchor_left = -0.167
+anchor_top = -0.167
+anchor_right = 1.167
+anchor_bottom = 1.167
+offset_left = 317.64
+offset_top = 125.36
+offset_right = -323.64
+offset_bottom = -235.36
+grow_horizontal = 2
+grow_vertical = 2
+
+[node name="VBoxContainer" type="VBoxContainer" parent="UI/GameOver/CenterContainer"]
+layout_mode = 2
+
+[node name="RichTextLabel" type="RichTextLabel" parent="UI/GameOver/CenterContainer/VBoxContainer"]
+custom_minimum_size = Vector2(300, 0)
+layout_mode = 2
+size_flags_horizontal = 4
+theme_override_fonts/normal_font = ExtResource("8_4mrxx")
+theme_override_font_sizes/normal_font_size = 55
+text = "Game Over"
+fit_content = true
+horizontal_alignment = 1
+vertical_alignment = 1
+
+[node name="podiumText" type="RichTextLabel" parent="UI/GameOver"]
+custom_minimum_size = Vector2(300, 0)
+layout_mode = 1
+anchors_preset = 14
+anchor_top = 0.5
+anchor_right = 1.0
+anchor_bottom = 0.5
+offset_top = 51.0
+offset_bottom = 51.0
+grow_horizontal = 2
+grow_vertical = 2
+theme_override_fonts/normal_font = ExtResource("8_4mrxx")
+theme_override_font_sizes/normal_font_size = 55
+bbcode_enabled = true
+fit_content = true
+autowrap_mode = 0
+horizontal_alignment = 1
+vertical_alignment = 1
+
+[node name="BackMenuButton" type="Button" parent="UI/GameOver"]
+layout_mode = 1
+anchors_preset = -1
+anchor_right = 1.0
+anchor_bottom = 1.0
+offset_left = 883.0
+offset_top = 664.0
+offset_right = -898.0
+offset_bottom = -374.0
+grow_horizontal = 2
+grow_vertical = 2
+theme_override_font_sizes/font_size = 24
+text = "Main Menu"
+
+[node name="InGameOptions" parent="UI" instance=ExtResource("6_w7kh3")]
+visible = false
 
 [node name="GameUI" type="Control" parent="UI"]
 visible = false
@@ -186,8 +300,11 @@ grow_vertical = 2
 
 [node name="Panel" type="Panel" parent="UI/GameUI"]
 layout_mode = 1
+offset_top = 161.0
 offset_right = 250.0
-offset_bottom = 300.0
+offset_bottom = 461.0
+theme = ExtResource("8_q5onr")
+theme_override_styles/panel = SubResource("StyleBoxFlat_jhx03")
 
 [node name="VBoxContainer" type="VBoxContainer" parent="UI/GameUI/Panel"]
 layout_mode = 0
@@ -202,17 +319,14 @@ text = "Players"
 custom_minimum_size = Vector2(200, 200)
 layout_mode = 2
 
-[node name="DisconnectButton" type="Button" parent="UI/GameUI/Panel/VBoxContainer"]
-layout_mode = 2
-text = "Disconnect"
-
 [node name="ScorePanel" type="Panel" parent="UI/GameUI"]
 layout_mode = 1
 anchors_preset = 1
 anchor_left = 1.0
 anchor_right = 1.0
 offset_left = -200.0
-offset_bottom = 150.0
+offset_top = 169.0
+offset_bottom = 319.0
 grow_horizontal = 0
 
 [node name="VBoxContainer" type="VBoxContainer" parent="UI/GameUI/ScorePanel"]
@@ -228,84 +342,8 @@ text = "Score: 0"
 layout_mode = 2
 text = "Lives: 3"
 
-[node name="Wave" type="Label" parent="UI/GameUI/ScorePanel/VBoxContainer"]
-layout_mode = 2
-text = "Wave: 1"
-
 [node name="BulletVelocityLabel" type="Label" parent="UI/GameUI/ScorePanel/VBoxContainer"]
 layout_mode = 2
-
-[node name="GameOver" type="Control" parent="UI" node_paths=PackedStringArray("backToMenuButton")]
-visible = false
-layout_mode = 3
-anchors_preset = 15
-anchor_right = 1.0
-anchor_bottom = 1.0
-grow_horizontal = 2
-grow_vertical = 2
-size_flags_horizontal = 6
-size_flags_vertical = 6
-script = ExtResource("8_7r4gi")
-backToMenuButton = NodePath("BackMenuButton")
-
-[node name="ColorRect" type="ColorRect" parent="UI/GameOver"]
-layout_mode = 1
-anchors_preset = 15
-anchor_right = 1.0
-anchor_bottom = 1.0
-grow_horizontal = 2
-grow_vertical = 2
-color = Color(0.43134, 0.43134, 0.43134, 1)
-
-[node name="podiumText" type="RichTextLabel" parent="UI/GameOver"]
-custom_minimum_size = Vector2(300, 0)
-layout_mode = 1
-offset_left = 250.0
-offset_top = 369.0
-offset_right = 550.0
-offset_bottom = 439.0
-scale = Vector2(2.12, 1)
-theme_override_fonts/normal_font = ExtResource("8_4mrxx")
-theme_override_font_sizes/normal_font_size = 55
-bbcode_enabled = true
-fit_content = true
-autowrap_mode = 0
-horizontal_alignment = 1
-vertical_alignment = 1
-
-[node name="CenterContainer" type="CenterContainer" parent="UI/GameOver"]
-layout_mode = 1
-anchors_preset = 15
-anchor_right = 1.0
-anchor_bottom = 1.0
-offset_left = -3.0
-offset_top = -55.0
-offset_right = -3.0
-offset_bottom = -55.0
-grow_horizontal = 2
-grow_vertical = 2
-
-[node name="VBoxContainer" type="VBoxContainer" parent="UI/GameOver/CenterContainer"]
-layout_mode = 2
-
-[node name="RichTextLabel" type="RichTextLabel" parent="UI/GameOver/CenterContainer/VBoxContainer"]
-custom_minimum_size = Vector2(300, 0)
-layout_mode = 2
-theme_override_fonts/normal_font = ExtResource("8_4mrxx")
-theme_override_font_sizes/normal_font_size = 55
-text = "Game Over"
-fit_content = true
-horizontal_alignment = 1
-vertical_alignment = 1
-
-[node name="BackMenuButton" type="Button" parent="UI/GameOver"]
-layout_mode = 0
-offset_left = 501.0
-offset_top = 532.0
-offset_right = 640.0
-offset_bottom = 574.0
-theme_override_font_sizes/font_size = 24
-text = "Main Menu"
 
 [node name="NetworkManager" type="Node" parent="." node_paths=PackedStringArray("playersContainer", "worldGenerator")]
 script = ExtResource("6_qfnet")
@@ -331,6 +369,9 @@ skeleton = NodePath("../blacksphere")
 transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 0, 3.20281, 0)
 material_override = SubResource("StandardMaterial3D_w7kh3")
 mesh = SubResource("SphereMesh_4mrxx")
+
+[node name="Music" type="AudioStreamPlayer" parent="."]
+bus = &"Music"
 
 [connection signal="pressed" from="UI/GameOver/BackMenuButton" to="UI/GameOver" method="BackMenu"]
 

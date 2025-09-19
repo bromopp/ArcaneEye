@@ -9,12 +9,16 @@ public partial class WorldGenerator : Node3D
 	private const float ASTEROID_BOUND_FACTOR = 0.8f;
 	
 	[Export] private float worldSize = 100.0f;
-	[Export] private int asteroidCount = 15;
+	[Export] private int asteroidCount = 4;
 	[Export] private bool showWorldBounds = true;
 	[Export] private bool showGrid = true;
 	[Export] private PackedScene asteroidScene;
-	[Export] private float proximityDistance = 10.0f; // Distance to show bounds
-	[Export] private float gridRadius = 10.0f; // Radius for per-player grid visualization
+	[Export] private float proximityDistance = 10.0f;
+	[Export] private float gridRadius = 10.0f;
+	
+	// Asteroid generation parameters
+	[Export] private float asteroidMinSeparation = 25.0f; // Minimum distance between asteroids
+	[Export] private float shipSizeReference = 1.0f; // Reference ship size for asteroid scaling
 	
 	private int worldSeed;
 	private RandomNumberGenerator rng;
@@ -24,8 +28,10 @@ public partial class WorldGenerator : Node3D
 	private ShaderMaterial gridShaderMaterial;
 	
 	// World components
-	private MeshInstance3D worldBoundsMesh;
 	private List<Asteroid> asteroids = new List<Asteroid>();
+	
+	// Multiplayer synchronization data
+	private List<AsteroidSpawnData> asteroidSpawnData = new List<AsteroidSpawnData>();
 	
 	public float WorldSize => worldSize;
 	public int WorldSeed => worldSeed;
@@ -50,8 +56,16 @@ public partial class WorldGenerator : Node3D
 		rng = new RandomNumberGenerator();
 		rng.Seed = (ulong)seed;
 		
+		GD.Print($"Generating world with seed: {seed}");
+		
 		ClearWorld();
 		GenerateAsteroids();
+		
+		// If we're the server, broadcast asteroid data to clients
+		if (Multiplayer.IsServer())
+		{
+			BroadcastAsteroidData();
+		}
 	}
 	
 	private int GenerateRandomSeed()
@@ -61,12 +75,13 @@ public partial class WorldGenerator : Node3D
 	
 	private void ClearWorld()
 	{
-		// Clear asteroids
+		// Clear existing asteroids
 		foreach (var asteroid in asteroids)
 		{
 			asteroid?.QueueFree();
 		}
 		asteroids.Clear();
+		asteroidSpawnData.Clear();
 	}
 	
 	private void InitializeShaderGrid()
@@ -85,14 +100,12 @@ public partial class WorldGenerator : Node3D
 		gridShaderMaterial = new ShaderMaterial();
 		gridShaderMaterial.Shader = shader;
 		
-		// Set shader parameters for wormhole effect
+		// Set shader parameters
 		gridShaderMaterial.SetShaderParameter("world_size", worldSize);
 		gridShaderMaterial.SetShaderParameter("proximity_distance", proximityDistance);
 		gridShaderMaterial.SetShaderParameter("distortion_strength", 1.0f);
 		gridShaderMaterial.SetShaderParameter("wormhole_speed", 0.5f);
 		gridShaderMaterial.SetShaderParameter("spiral_intensity", 3.0f);
-		
-		// Depth testing and transparency are handled in the shader
 		
 		boundaryGridMesh.MaterialOverride = gridShaderMaterial;
 		boundaryGridMesh.Visible = showGrid;
@@ -106,28 +119,164 @@ public partial class WorldGenerator : Node3D
 			return;
 		}
 		
-		float bound = worldSize / 2.0f * ASTEROID_BOUND_FACTOR; // Keep asteroids away from edges initially
+		float bound = worldSize / 2.0f * ASTEROID_BOUND_FACTOR;
+		var positions = GenerateAsteroidPositions(bound);
 		
-		for (int i = 0; i < asteroidCount; i++)
+		for (int i = 0; i < positions.Count; i++)
 		{
+			// Create deterministic seed for each asteroid
+			int asteroidSeed = worldSeed + i * 1000;
+			
 			var asteroid = asteroidScene.Instantiate<Asteroid>();
 			AddChild(asteroid);
 			
-			// Random position
-			asteroid.Position = new Vector3(
+			// Set position
+			asteroid.Position = positions[i];
+			
+			// Calculate size multiplier (2x to 4x ship size)
+			var tempRng = new RandomNumberGenerator();
+			tempRng.Seed = (ulong)asteroidSeed;
+			float sizeMultiplier = 2.0f + tempRng.Randf() * 2.0f; // 2x to 4x
+			
+			// Store spawn data for multiplayer sync
+			var spawnData = new AsteroidSpawnData
+			{
+				Position = positions[i],
+				Seed = asteroidSeed,
+				SizeMultiplier = sizeMultiplier,
+				Index = i
+			};
+			asteroidSpawnData.Add(spawnData);
+			
+			// Initialize asteroid with deterministic parameters
+			asteroid.Initialize(this, asteroidSeed, sizeMultiplier);
+			asteroids.Add(asteroid);
+		}
+		
+		GD.Print($"Generated {asteroids.Count} procedural asteroids");
+	}
+	
+	private List<Vector3> GenerateAsteroidPositions(float bound)
+	{
+		var positions = new List<Vector3>();
+		int attempts = 0;
+		int maxAttempts = asteroidCount * 10; // Prevent infinite loops
+		
+		while (positions.Count < asteroidCount && attempts < maxAttempts)
+		{
+			attempts++;
+			
+			// Generate random position
+			var candidatePos = new Vector3(
 				rng.Randf() * bound * 2 - bound,
 				rng.Randf() * bound * 2 - bound,
 				rng.Randf() * bound * 2 - bound
 			);
 			
-			// Random size
-			float size = rng.Randf() * 2.0f + 1.0f;
-			asteroid.Scale = Vector3.One * size;
+			// Check minimum separation from existing asteroids
+			bool validPosition = true;
+			foreach (var existingPos in positions)
+			{
+				if (candidatePos.DistanceTo(existingPos) < asteroidMinSeparation)
+				{
+					validPosition = false;
+					break;
+				}
+			}
 			
-			// Initialize with world reference
-			asteroid.Initialize(this);
+			// Also ensure not too close to world center (spawn area)
+			if (candidatePos.Length() < asteroidMinSeparation * 2)
+			{
+				validPosition = false;
+			}
+			
+			if (validPosition)
+			{
+				positions.Add(candidatePos);
+			}
+		}
+		
+		if (positions.Count < asteroidCount)
+		{
+			GD.PrintErr($"Could only place {positions.Count}/{asteroidCount} asteroids with current separation constraints");
+		}
+		
+		return positions;
+	}
+	
+	// Multiplayer synchronization methods
+	private void BroadcastAsteroidData()
+	{
+		if (!Multiplayer.IsServer()) return;
+		
+		// Send asteroid spawn data to all clients
+		foreach (var spawnData in asteroidSpawnData)
+		{
+			Rpc(MethodName.ReceiveAsteroidSpawnData, 
+				spawnData.Index, 
+				spawnData.Position, 
+				spawnData.Seed, 
+				spawnData.SizeMultiplier);
+		}
+		
+		// Signal that asteroid data transmission is complete
+		Rpc(MethodName.OnAsteroidDataComplete);
+	}
+	
+	[Rpc(MultiplayerApi.RpcMode.Authority, CallLocal = false, TransferMode = MultiplayerPeer.TransferModeEnum.Reliable)]
+	private void ReceiveAsteroidSpawnData(int index, Vector3 position, int seed, float sizeMultiplier)
+	{
+		// Store received data for later instantiation
+		var spawnData = new AsteroidSpawnData
+		{
+			Index = index,
+			Position = position,
+			Seed = seed,
+			SizeMultiplier = sizeMultiplier
+		};
+		
+		// Ensure list is large enough
+		while (asteroidSpawnData.Count <= index)
+		{
+			asteroidSpawnData.Add(null);
+		}
+		
+		asteroidSpawnData[index] = spawnData;
+		GD.Print($"Received asteroid data for index {index}");
+	}
+	
+	[Rpc(MultiplayerApi.RpcMode.Authority, CallLocal = false, TransferMode = MultiplayerPeer.TransferModeEnum.Reliable)]
+	private void OnAsteroidDataComplete()
+	{
+		GD.Print("Asteroid data transmission complete, generating client asteroids");
+		GenerateClientAsteroids();
+	}
+	
+	private void GenerateClientAsteroids()
+	{
+		if (asteroidScene == null)
+		{
+			GD.PrintErr("Asteroid scene not set on client!");
+			return;
+		}
+		
+		// Clear any existing asteroids
+		ClearWorld();
+		
+		// Generate asteroids from received data
+		foreach (var spawnData in asteroidSpawnData)
+		{
+			if (spawnData == null) continue;
+			
+			var asteroid = asteroidScene.Instantiate<Asteroid>();
+			AddChild(asteroid);
+			
+			asteroid.Position = spawnData.Position;
+			asteroid.Initialize(this, spawnData.Seed, spawnData.SizeMultiplier);
 			asteroids.Add(asteroid);
 		}
+		
+		GD.Print($"Client generated {asteroids.Count} synchronized asteroids");
 	}
 	
 	public void WrapPosition(ref Vector3 position)
@@ -189,7 +338,6 @@ public partial class WorldGenerator : Node3D
 		float half = worldSize / 2.0f;
 		float threshold = proximityDistance;
 
-		// Check distance to any face of the cube
 		float distanceToNearestFace = Mathf.Min(
 			Mathf.Min(half - Mathf.Abs(position.X), half - Mathf.Abs(position.Y)),
 			half - Mathf.Abs(position.Z)
@@ -197,5 +345,32 @@ public partial class WorldGenerator : Node3D
 
 		return distanceToNearestFace <= threshold;
 	}
+	
+	// Method to validate asteroid synchronization (debugging)
+	public void ValidateAsteroidSync()
+	{
+		GD.Print("=== Asteroid Synchronization Validation ===");
+		GD.Print($"World Seed: {worldSeed}");
+		GD.Print($"Asteroid Count: {asteroids.Count}");
+		
+		for (int i = 0; i < asteroids.Count && i < asteroidSpawnData.Count; i++)
+		{
+			if (asteroids[i] != null && asteroidSpawnData[i] != null)
+			{
+				var asteroid = asteroids[i];
+				var data = asteroidSpawnData[i];
+				
+				GD.Print($"Asteroid {i}: Pos={asteroid.GlobalPosition}, Seed={data.Seed}, Size={data.SizeMultiplier}");
+			}
+		}
+	}
+}
 
+// Data structure for asteroid spawn information
+public partial class AsteroidSpawnData : GodotObject
+{
+	public int Index { get; set; }
+	public Vector3 Position { get; set; }
+	public int Seed { get; set; }
+	public float SizeMultiplier { get; set; }
 }
